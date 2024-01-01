@@ -1,30 +1,38 @@
 <script setup>
-import HelloWorld from './components/HelloWorld.vue'
 </script>
 
 <template>
+<div>
+  
   <div>
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo" alt="Vite logo" />
-    </a>
-    <a href="https://vuejs.org/" target="_blank">
-      <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-    </a>
+    <h1>Welcome To KVAULT</h1>
   </div>
-  <HelloWorld msg="Vite + Vue" />
-</template>
+  <h2>Login</h2>
 
-<style scoped>
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #42b883aa);
-}
-</style>
+  <div>errorMessage</div>
+  <div>successMessage</div>
+
+  <form>
+    <div>
+      <label for="email">Email</label>
+      <input type="email" id="email" required />
+    </div>
+
+    <div>
+      <label for="password">Password</label>
+      <input type="password" id="password" required />
+    </div>
+
+    <div>
+      <label for="twoFactorCode">2FA Code</label>
+      <input type="text" id="twoFactorCode" required />
+    </div>
+
+    <p>
+      <a href="#">Forgot my password</a>
+    </p>
+
+    <button type="submit">Login</button>
+  </form>
+</div>
+</template>
