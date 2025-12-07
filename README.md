@@ -1,7 +1,7 @@
 # kvault
 
 
-# Run la db de test :
+## Run la db de test :
 
 ### créer le conteneur 
 
@@ -12,3 +12,7 @@ mysql -u root -p (code "1234")
 CREATE DATABASE kvault;
 ```
 ### Y mettre le contenue de db-scheme.txt
+
+## Run le Front et le Back 
+
+`npm run dev`
