@@ -9,6 +9,7 @@ const bcrypt = require("bcrypt");
 const { QueryTypes } = require("sequelize");
 const { Limiter } = require('../functions')
 const validator = require("validator");
+const { hashPassword } = require("../functions/functions");
 
 router.get('/about', (req, res) => {
     res.send('About the auth');
@@ -16,6 +17,7 @@ router.get('/about', (req, res) => {
 
 router.post("/register",Limiter, async (req, res) => {
   const { email, password } = req.body;
+  password = hashPassword(password)
   req.log?.info({ email }, 'Register attempt');
 
   if (!email || !password) {
@@ -45,7 +47,7 @@ router.post("/register",Limiter, async (req, res) => {
       `INSERT INTO users 
         (login, hashed_master_password, is_verified, verification_token, kdf_salt, encrypted_master_key) 
        VALUES 
-        (:email, :password, FALSE, :verificationToken, "0", "0");`,
+        (:email, :password, TRUE, :verificationToken, "0", "0");`,
       {
         replacements: { email, password, verificationToken },
         type: sequelize.QueryTypes.INSERT,
