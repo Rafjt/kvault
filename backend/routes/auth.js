@@ -176,5 +176,46 @@ router.post("/login", Limiter, async (req, res) => {
   }
 });
 
+router.post("/logout", async (req, res) => {
+  try {
+    const token = req.cookies?.auth_token;
+
+    if (!token) {
+      // Rien à révoquer, logout idempotent
+      return res.status(204).send();
+    }
+
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest();
+
+    await sequelize.query(
+      `
+      DELETE FROM auth_tokens
+      WHERE token_hash = ?
+      `,
+      {
+        replacements: [tokenHash],
+        type: QueryTypes.DELETE
+      }
+    );
+
+    // Suppression du cookie côté client
+    res.clearCookie("auth_token", {
+      httpOnly: true,
+      sameSite: "Lax",
+      secure: false // true en HTTPS
+    });
+
+    return res.status(200).json({ message: "Logged out successfully" });
+
+  } catch (error) {
+    req.log?.error({ err: error }, "Logout error");
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+
 
 module.exports = router;
