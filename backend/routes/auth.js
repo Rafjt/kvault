@@ -17,7 +17,7 @@ router.get('/about', (req, res) => {
 
 router.post("/register",Limiter, async (req, res) => {
   const { email, password } = req.body;
-  password = hashPassword(password)
+  Hashedpassword = await hashPassword(password)
   req.log?.info({ email }, 'Register attempt');
 
   if (!email || !password) {
@@ -41,15 +41,14 @@ router.post("/register",Limiter, async (req, res) => {
       return res.status(409).json({ error: "Email already registered." });
     }
 
-    const verificationToken = crypto.randomBytes(32).toString("hex");
 
     await sequelize.query(
       `INSERT INTO users 
         (login, hashed_master_password, is_verified, verification_token, kdf_salt, encrypted_master_key) 
        VALUES 
-        (:email, :password, TRUE, :verificationToken, "0", "0");`,
+        (:email, :Hashedpassword, TRUE, null, "0", "0");`,
       {
-        replacements: { email, password, verificationToken },
+        replacements: { email, Hashedpassword },
         type: sequelize.QueryTypes.INSERT,
       }
     );
@@ -110,63 +109,70 @@ router.post("/register",Limiter, async (req, res) => {
 
 router.post("/login", Limiter, async (req, res) => {
   const { email, password } = req.body;
-  req.log?.info({ email }, 'Login attempt');
+  req.log?.info({ email }, "Login attempt");
 
   if (!email || !password) {
-    req.log?.warn({ email }, 'Missing email or password during login');
     return res.status(400).json({ message: "Email and password are required" });
   }
 
   try {
-    const user = await sequelize.query(
-      "SELECT id, login, hashed_master_password, is_verified FROM rrpm_user WHERE login = ?",
+    const users = await sequelize.query(
+      `
+      SELECT id, login, hashed_master_password, is_verified
+      FROM users
+      WHERE login = ?
+      `,
       { replacements: [email], type: QueryTypes.SELECT }
     );
 
-    if (user.length === 0) {
-      req.log?.warn({ email }, 'Invalid login credentials (no such user)');
+    if (users.length === 0) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const { id, login, hashed_master_password, is_verified } = user[0];
+    const { id, hashed_master_password, is_verified } = users[0];
 
     if (!is_verified) {
-      req.log?.warn({ userId: id, email }, 'Login blocked - account not verified');
       return res.status(403).json({ message: "Account not verified" });
     }
 
     const isMatch = await bcrypt.compare(password, hashed_master_password);
     if (!isMatch) {
-      req.log?.warn({ userId: id, email }, 'Invalid password attempt');
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // Vérifier si le 2FA est activé
-    const [twoFaResult] = await sequelize.query(
-      "SELECT enabled FROM user_2fa WHERE user_id = ?",
-      { replacements: [id], type: QueryTypes.SELECT }
+    // =========================
+    // Génération token opaque
+    // =========================
+    const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(token).digest();
+
+    await sequelize.query(
+      `
+      INSERT INTO auth_tokens (user_id, token_hash, expires_at)
+      VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))
+      `,
+      {
+        replacements: [id, tokenHash],
+        type: QueryTypes.INSERT
+      }
     );
 
-    if (twoFaResult && twoFaResult.enabled) {
-      // 2FA requis → demande de code TOTP
-      return res.json({ message: "2FA required", twoFactorRequired: true, userId: id });
-    }
-
-    // Pas de 2FA → connexion immédiate
-    const token = jwt.sign({ id, login }, SECRET_KEY, { expiresIn: "1h" });
-
-    req.log?.info({ userId: id }, 'Login successful');
-    res.cookie("token", token, {
+    // =========================
+    // Cookie sécurisé (local)
+    // =========================
+    res.cookie("auth_token", token, {
       httpOnly: true,
-      secure: true,
-      sameSite: "None",
-      maxAge: 3600000,
+      sameSite: "Lax",   // OK en local
+      secure: false,     // ⚠️ true seulement en HTTPS
+      maxAge: 60 * 60 * 1000
     });
 
-    res.json({ message: "Login successful", token });
+    req.log?.info({ userId: id }, "Login successful");
+    return res.json({ message: "Login successful" });
+
   } catch (error) {
-    req.log?.error({ email, err: error }, 'Login error');
-    res.status(500).json({ message: "Internal server error" });
+    req.log?.error({ err: error }, "Login error");
+    return res.status(500).json({ message: "Internal server error" });
   }
 });
 
