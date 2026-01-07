@@ -7,7 +7,7 @@
 
 ```bash
 docker run --name db -e MYSQL_ROOT_PASSWORD=1234 -p 3306:3306 -d mysql:latest
-docker exec -it db
+docker exec -it db bash
 mysql -u root -p (code "1234")
 CREATE DATABASE kvault;
 ```
