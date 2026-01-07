@@ -134,6 +134,7 @@ router.post("/register", Limiter, async (req, res) => {
 
 router.post("/login", Limiter, async (req, res) => {
   const { email, password } = req.body;
+  req.log?.info({ email }, "Login attempt");
 
   if (!email || !password) {
     return res.status(400).json({ message: "Email and password are required" });
@@ -142,39 +143,103 @@ router.post("/login", Limiter, async (req, res) => {
   try {
     const users = await sequelize.query(
       `
-      SELECT id, hashed_master_password, is_verified
+      SELECT id, login, hashed_master_password, is_verified
       FROM users
       WHERE login = ?
       `,
-      {
-        replacements: [email],
-        type: QueryTypes.SELECT
-      }
+      { replacements: [email], type: QueryTypes.SELECT }
     );
 
     if (users.length === 0) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const user = users[0];
+    const { id, hashed_master_password, is_verified } = users[0];
 
-    if (!user.is_verified) {
+    if (!is_verified) {
       return res.status(403).json({ message: "Account not verified" });
     }
 
-    const match = await bcrypt.compare(password, user.hashed_master_password);
-    if (!match) {
+    const isMatch = await bcrypt.compare(password, hashed_master_password);
+    if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
+    // =========================
+    // Génération token opaque
+    // =========================
+    const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(token).digest();
+
+    await sequelize.query(
+      `
+      INSERT INTO auth_tokens (user_id, token_hash, expires_at)
+      VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))
+      `,
+      {
+        replacements: [id, tokenHash],
+        type: QueryTypes.INSERT
+      }
+    );
+
+    // =========================
+    // Cookie sécurisé (local)
+    // =========================
+    res.cookie("auth_token", token, {
+      httpOnly: true,
+      sameSite: "Lax",   // OK en local
+      secure: false,     // ⚠️ true seulement en HTTPS
+      maxAge: 60 * 60 * 1000
+    });
+
+    req.log?.info({ userId: id }, "Login successful");
     return res.json({ message: "Login successful" });
 
   } catch (error) {
-    console.error("LOGIN ERROR:", error);
+    req.log?.error({ err: error }, "Login error");
     return res.status(500).json({ message: "Internal server error" });
   }
 });
 
+router.post("/logout", async (req, res) => {
+  try {
+    const token = req.cookies?.auth_token;
+
+    if (!token) {
+      // Rien à révoquer, logout idempotent
+      return res.status(204).send();
+    }
+
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest();
+
+    await sequelize.query(
+      `
+      DELETE FROM auth_tokens
+      WHERE token_hash = ?
+      `,
+      {
+        replacements: [tokenHash],
+        type: QueryTypes.DELETE
+      }
+    );
+
+    // Suppression du cookie côté client
+    res.clearCookie("auth_token", {
+      httpOnly: true,
+      sameSite: "Lax",
+      secure: false // true en HTTPS
+    });
+
+    return res.status(200).json({ message: "Logged out successfully" });
+
+  } catch (error) {
+    req.log?.error({ err: error }, "Logout error");
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
 /* ========================= VERIFY EMAIL ========================= */
 
 router.get("/verify-email", async (req, res) => {
