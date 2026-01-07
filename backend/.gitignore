@@ -1,3 +1,5 @@
 db-scheme.txt
 
 node_modules/
+
+.env
