@@ -89,21 +89,35 @@ router.post("/register", Limiter, async (req, res) => {
 
     // Temporary values (will be regenerated later in your flow)
     const kdfSalt = crypto.randomBytes(16);
-    const encryptedMasterKey = Buffer.alloc(0);
+    const masterKey = crypto.randomBytes(32);
+    const ITERATIONS = 210_000;
+
+    // KEK dérivée via KDF
+    const kek = crypto.pbkdf2Sync(password, kdfSalt, ITERATIONS, 32, "sha256");
+
+    // Chiffrement de la master key
+    const iv = crypto.randomBytes(12); // nonce AES-GCM
+    const cipher = crypto.createCipheriv("aes-256-gcm", kek, iv);
+
+    const encryptedMK = Buffer.concat([
+      cipher.update(masterKey),
+      cipher.final(),
+    ]);
+
 
     await sequelize.query(
       `
       INSERT INTO users
         (login, hashed_master_password, kdf_salt, encrypted_master_key, is_verified, verification_token)
       VALUES
-        (:email, :hashedPassword, :kdfSalt, :encryptedMasterKey, false, :verificationToken)
+        (:email, :hashedPassword, :kdfSalt, :encryptedMK, false, :verificationToken)
       `,
       {
         replacements: {
           email,
           hashedPassword,
           kdfSalt,
-          encryptedMasterKey,
+          encryptedMK,
           verificationToken
         },
         type: QueryTypes.INSERT
