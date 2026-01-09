@@ -155,9 +155,11 @@ router.post("/login", Limiter, async (req, res) => {
   }
 
   try {
+    // 1️⃣ Récupération utilisateur
     const users = await sequelize.query(
       `
-      SELECT id, login, hashed_master_password, is_verified
+      SELECT id, login, hashed_master_password, is_verified,
+             encrypted_master_key, kdf_salt
       FROM users
       WHERE login = ?
       `,
@@ -168,12 +170,13 @@ router.post("/login", Limiter, async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const { id, hashed_master_password, is_verified } = users[0];
+    const { id, hashed_master_password, is_verified, encrypted_master_key, kdf_salt } = users[0];
 
     if (!is_verified) {
       return res.status(403).json({ message: "Account not verified" });
     }
 
+    // 2️⃣ Vérification mot de passe
     const isMatch = await bcrypt.compare(password, hashed_master_password);
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials" });
@@ -206,8 +209,18 @@ router.post("/login", Limiter, async (req, res) => {
       maxAge: 60 * 60 * 1000
     });
 
+    // =========================
+    // Renvoi de la C_MK + KDF info
+    // =========================
+    res.json({
+      message: "Login successful",
+      crypto: {
+        encrypted_master_key: Buffer.from(encrypted_master_key).toString("base64"),
+        kdf_salt: Buffer.from(kdf_salt).toString("base64"),
+      }
+    });
+
     req.log?.info({ userId: id }, "Login successful");
-    return res.json({ message: "Login successful" });
 
   } catch (error) {
     req.log?.error({ err: error }, "Login error");
