@@ -35,8 +35,8 @@ const onSubmit = async (e) => {
       successMessage.value = data.message || 'Login successful'
       console.log('crypto:', data.crypto)
 
-      // 👉 plus tard : redirection dashboard
-      // router.push('/dashboard')
+      router.push('/home')
+
     }
   } catch {
     errorMessage.value = 'Network error'
