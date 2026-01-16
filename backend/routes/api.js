@@ -79,25 +79,33 @@ router.get("/secrets", authMiddleware, async (req, res) => {
  */
 router.post("/create", authMiddleware, async (req, res) => {
   const userId = req.user.id;
-  const { type, name, ciphertext, nonce } = req.body;
+  const { name, type, ciphertext, nonce } = req.body;
 
-  if (!type || !name || !ciphertext || !nonce) {
+  // =========================
+  // Validation minimale
+  // =========================
+  if (!name || !type || !ciphertext || !nonce) {
     return res.status(400).json({
-      message: "type, name, ciphertext and nonce are required"
+      message: "name, type, ciphertext and nonce are required"
     });
   }
 
   try {
+    // =========================
+    // Insert DB
+    // =========================
     await sequelize.query(
       `
-      INSERT INTO secrets (owner_id, type, name, ciphertext, nonce)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO secrets
+        (owner_id, name, type, ciphertext, nonce)
+      VALUES
+        (?, ?, ?, ?, ?)
       `,
       {
         replacements: [
           userId,
-          type,
           name,
+          type,
           Buffer.from(ciphertext, "base64"),
           Buffer.from(nonce, "base64")
         ],
@@ -110,7 +118,11 @@ router.post("/create", authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    req.log?.error({ err: error, userId }, "Create secret error");
+    req.log?.error(
+      { err: error, userId },
+      "Create secret error"
+    );
+
     return res.status(500).json({
       message: "Internal server error"
     });
