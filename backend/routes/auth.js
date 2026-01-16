@@ -103,27 +103,53 @@ router.post("/register", Limiter, async (req, res) => {
       }
     }
 
+    // =========================
+    // Hash mot de passe (auth)
+    // =========================
     const hashedPassword = await hashPassword(password);
 
+    // =========================
+    // Crypto setup
+    // =========================
     const verificationToken = crypto.randomBytes(32).toString("hex");
-
-    // Temporary values (will be regenerated later in your flow)
     const kdfSalt = crypto.randomBytes(16);
-    const masterKey = crypto.randomBytes(32);
     const ITERATIONS = 210_000;
 
-    // KEK dérivée via KDF
-    const kek = crypto.pbkdf2Sync(password, kdfSalt, ITERATIONS, 32, "sha256");
+    // Master Key aléatoire (indépendante du mot de passe)
+    const masterKey = crypto.randomBytes(32);
 
-    // Chiffrement de la master key
-    const iv = crypto.randomBytes(12); // nonce AES-GCM
+    // Dérivation KEK
+    const kek = crypto.pbkdf2Sync(
+      password,
+      kdfSalt,
+      ITERATIONS,
+      32,
+      "sha256"
+    );
+
+    // =========================
+    // Chiffrement Master Key (AES-GCM)
+    // =========================
+    const iv = crypto.randomBytes(12); // nonce GCM
     const cipher = crypto.createCipheriv("aes-256-gcm", kek, iv);
 
-    const encryptedMK = Buffer.concat([
+    const ciphertext = Buffer.concat([
       cipher.update(masterKey),
-      cipher.final(),
+      cipher.final()
     ]);
 
+    const authTag = cipher.getAuthTag();
+
+    // FORMAT CANONIQUE : IV || CIPHERTEXT || TAG
+    const encryptedMasterKey = Buffer.concat([
+      iv,
+      ciphertext,
+      authTag
+    ]);
+
+    // =========================
+    // Insert DB
+    // =========================
     await sequelize.query(
       `
       INSERT INTO users
@@ -154,6 +180,7 @@ router.post("/register", Limiter, async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 /* ========================= LOGIN ========================= */
 

@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { API_AUTH_URL } from "../components/constant.js";
 
 const router = useRouter()
 
@@ -17,7 +18,7 @@ const onSubmit = async (e) => {
   loading.value = true
 
   try {
-    const res = await fetch('http://localhost:2111/auth/register', {
+    const res = await fetch(`${API_AUTH_URL}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
