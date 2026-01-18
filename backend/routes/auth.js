@@ -10,6 +10,8 @@ const validator = require("validator");
 const { Limiter } = require("../functions");
 const { hashPassword } = require("../functions/functions");
 const { sendTokenMail } = require("../functions/mailer");
+const { authMiddleware } = require("../middleware/auth.middleware.js");
+
 
 /* =========================================================
    Helpers
@@ -56,6 +58,14 @@ function renderPage(message, isError = false) {
 router.get("/about", (req, res) => {
   res.send("About the auth");
 });
+
+router.get('/me', authMiddleware, (req, res) => {
+  res.json({
+    id: req.user.id,
+    email: req.user.login
+  })
+})
+
 
 /* ========================= REGISTER ========================= */
 

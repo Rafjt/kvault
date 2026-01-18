@@ -4,12 +4,13 @@ import Register from '../views/Register.vue'
 import Home from '../views/Home.vue'
 import Create from '../views/CreateSecret.vue'
 
+
 const routes = [
   { path: '/', redirect: '/login' },
   { path: '/login', name: 'login', component: Login },
   { path: '/register', name: 'register', component: Register },
-  { path: '/home', name: 'home', component: Home },
-  { path: '/create', name: 'create', component: Create }
+  { path: '/home', name: 'home', component: Home, meta: { requiresAuth: true } },
+  { path: '/create', name: 'create', component: Create, meta: { requiresAuth: true } }
 ]
 
 const router = createRouter({
