@@ -96,9 +96,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
+  <div class="secrets-page">
     <h2>Your Secrets</h2>
-
+    <button class="create-btn" @click="createsec">
+      + Create secret
+    </button>
     <div v-if="loading">Loading secrets...</div>
     <div v-if="errorMessage" style="color:#b91c1c">
       {{ errorMessage }}
@@ -108,23 +110,38 @@ onMounted(async () => {
       <p>No secrets found.</p>
     </div>
 
-    <ul v-if="secrets.length > 0" style="list-style:none; padding:0">
-      <li v-for="secret in secrets" :key="secret.id" style="margin-bottom: 1em; border:1px solid #e5e7eb; padding: 0.5em; border-radius:0.5em;">
-        <div><strong>Name:</strong> {{ secret.name }}</div>
-        <div><strong>Type:</strong> {{ secret.type }}</div>
-        <div>
-          <strong>Value:</strong>
-          <span>{{ showValues[secret.id] ? secret.value : '***' }}</span>
-          <button @click="toggleValue(secret.id)" style="margin-left:0.5em;">
+    <ul v-if="secrets.length > 0" class="secrets-list">
+      <li
+        v-for="secret in secrets"
+        :key="secret.id"
+        class="secret-card"
+      >
+        <div class="secret-main">
+          <div class="secret-name">{{ secret.name }}</div>
+          <div class="secret-type">{{ secret.type }}</div>
+        </div>
+
+        <div class="secret-meta">
+          <div>Created: {{ new Date(secret.created_at).toLocaleDateString() }}</div>
+          <div>Updated: {{ new Date(secret.updated_at).toLocaleDateString() }}</div>
+        </div>
+
+        <div class="secret-value">
+          {{ showValues[secret.id] ? secret.value : '************' }}
+        </div>
+
+        <div class="secret-actions">
+          <button @click="toggleValue(secret.id)">
             {{ showValues[secret.id] ? 'Hide' : 'Show' }}
           </button>
+          <button>
+            Update
+          </button>
+          <button>
+            delete
+          </button>
         </div>
-        <div><strong>Created:</strong> {{ new Date(secret.created_at).toLocaleString() }}</div>
-        <div><strong>Last update:</strong> {{ new Date(secret.updated_at).toLocaleString() }}</div>
       </li>
     </ul>
-    <button @click="createsec()" style="margin-left:0.5em;">
-            Create a secret
-    </button>
   </div>
 </template>
