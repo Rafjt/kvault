@@ -4,6 +4,9 @@ import './style.css'
 import App from './App.vue'
 import router from './router'
 
+import { authGuard } from './router/guard'
+router.beforeEach(authGuard)
+
 const app = createApp(App)
 
 const pinia = createPinia()
