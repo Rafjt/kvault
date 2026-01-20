@@ -15,7 +15,9 @@ const form = ref({
   type: "text",
   value: ""
 })
-
+async function back_home() {
+  router.push("/home")
+}
 async function submitSecret() {
   errorMessage.value = ""
 
@@ -70,6 +72,9 @@ async function submitSecret() {
 
 <template>
   <div style="max-width: 480px; margin: auto">
+    <button @click="back_home()">
+        Cancel
+    </button>
     <h2>Create a secret</h2>
 
     <div v-if="errorMessage" style="color:#b91c1c">
