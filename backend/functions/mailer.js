@@ -30,3 +30,15 @@ export const sendMail = async (to, subject, text, html) => {
     throw error;
   }
 };
+
+
+export const sendTokenMail = async (verificationToken, email) => {
+  const verificationLink = `http://localhost:2111/auth/verify-email?token=${verificationToken}`;
+
+  await sendMail(
+    email,
+    "Verify your email",
+    `Verify your email: ${verificationLink}`,
+    `<p>Click <a href="${verificationLink}">here</a> to verify your email.</p>`
+  );
+};

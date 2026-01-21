@@ -7,9 +7,9 @@ const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const validator = require("validator");
 
-const { sendMail } = require("../functions/mailer");
 const { Limiter } = require("../functions");
 const { hashPassword } = require("../functions/functions");
+const { sendTokenMail } = require("../functions/mailer");
 
 /* =========================================================
    Helpers
@@ -72,15 +72,35 @@ router.post("/register", Limiter, async (req, res) => {
 
   try {
     const existing = await sequelize.query(
-      "SELECT id FROM users WHERE login = :email",
+      "SELECT id, is_verified, token_expiry FROM users WHERE login = :email",
       {
         replacements: { email },
-        type: QueryTypes.SELECT
+        type: QueryTypes.SELECT,
       }
     );
 
     if (existing.length > 0) {
-      return res.status(409).json({ error: "Email already registered." });
+      const user = existing[0];
+
+      // Case 2: already verified → hard block
+      if (Boolean(user.is_verified)) {
+        return res.status(409).json({ error: "Email already registered." });
+      }
+
+      // Case 4: not verified but token still valid → block
+      if (user.token_expiry && user.token_expiry > new Date()) {
+        return res.status(409).json({
+          error: "Account not verified yet. Please check your email.",
+        });
+      }
+
+      // NOT verified AND expired → delete
+      if (user.token_expiry && user.token_expiry < new Date()) {
+        await sequelize.query("DELETE FROM users WHERE login = :email", {
+          replacements: { email },
+          type: QueryTypes.DELETE,
+        });
+      }
     }
 
     const hashedPassword = await hashPassword(password);
@@ -104,13 +124,12 @@ router.post("/register", Limiter, async (req, res) => {
       cipher.final(),
     ]);
 
-
     await sequelize.query(
       `
       INSERT INTO users
-        (login, hashed_master_password, kdf_salt, encrypted_master_key, is_verified, verification_token)
+        (login, hashed_master_password, kdf_salt, encrypted_master_key, is_verified, verification_token, token_expiry)
       VALUES
-        (:email, :hashedPassword, :kdfSalt, :encryptedMK, false, :verificationToken)
+        (:email, :hashedPassword, :kdfSalt, :encryptedMK, false, :verificationToken, DATE_ADD(NOW(), INTERVAL 30 MINUTE))
       `,
       {
         replacements: {
@@ -118,26 +137,18 @@ router.post("/register", Limiter, async (req, res) => {
           hashedPassword,
           kdfSalt,
           encryptedMK,
-          verificationToken
+          verificationToken,
         },
-        type: QueryTypes.INSERT
+        type: QueryTypes.INSERT,
       }
     );
 
-    const verificationLink =
-      `http://localhost:2111/auth/verify-email?token=${verificationToken}`;
-
-    await sendMail(
-      email,
-      "Verify your email",
-      `Verify your email: ${verificationLink}`,
-      `<p>Click <a href="${verificationLink}">here</a> to verify your email.</p>`
-    );
+    await sendTokenMail(verificationToken, email);
 
     return res.status(201).json({
-      message: "User registered. Verification email sent."
+      message:
+        "User registered. Verification email sent. Will expire in 30 minutes",
     });
-
   } catch (error) {
     console.error("REGISTER ERROR:", error);
     return res.status(500).json({ error: "Internal server error" });
@@ -151,39 +162,79 @@ router.post("/login", Limiter, async (req, res) => {
   req.log?.info({ email }, "Login attempt");
 
   if (!email || !password) {
-    return res.status(400).json({ message: "Email and password are required" });
+    return res.status(400).json({
+      message: "Email and password are required",
+    });
   }
 
   try {
-    // 1️⃣ Récupération utilisateur
+    // 1️⃣ Fetch user
     const users = await sequelize.query(
       `
       SELECT id, login, hashed_master_password, is_verified,
-             encrypted_master_key, kdf_salt
+             encrypted_master_key, kdf_salt, token_expiry
       FROM users
       WHERE login = ?
       `,
-      { replacements: [email], type: QueryTypes.SELECT }
+      {
+        replacements: [email],
+        type: QueryTypes.SELECT,
+      }
     );
 
     if (users.length === 0) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      return res.status(401).json({
+        message: "Invalid credentials",
+      });
     }
 
-    const { id, hashed_master_password, is_verified, encrypted_master_key, kdf_salt } = users[0];
+    const user = users[0];
 
-    if (!is_verified) {
-      return res.status(403).json({ message: "Account not verified" });
-    }
+    // 2️⃣ Check password FIRST
+    const isMatch = await bcrypt.compare(password, user.hashed_master_password);
 
-    // 2️⃣ Vérification mot de passe
-    const isMatch = await bcrypt.compare(password, hashed_master_password);
     if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      return res.status(401).json({
+        message: "Invalid credentials",
+      });
+    }
+
+    // 3️⃣ Email not verified
+    if (!user.is_verified) {
+      // Token expired → regenerate & resend
+      if (user.token_expiry && user.token_expiry < new Date()) {
+        const newToken = crypto.randomBytes(32).toString("hex");
+
+        await sequelize.query(
+          `
+          UPDATE users
+          SET verification_token = :token,
+              token_expiry = DATE_ADD(NOW(), INTERVAL 30 MINUTE)
+          WHERE id = :id
+          `,
+          {
+            replacements: {
+              token: newToken,
+              id: user.id,
+            },
+            type: QueryTypes.UPDATE,
+          }
+        );
+
+        await sendTokenMail(newToken, email);
+
+        return res.status(403).json({
+          message: "Verification link expired. A new email has been sent.",
+        });
+      }
+
+      return res.status(403).json({
+        message: "Please verify your email before logging in.",
+      });
     }
 
     // =========================
-    // Génération token opaque
+    // 4️⃣ Generate auth token
     // =========================
     const token = crypto.randomBytes(32).toString("hex");
     const tokenHash = crypto.createHash("sha256").update(token).digest();
@@ -194,37 +245,38 @@ router.post("/login", Limiter, async (req, res) => {
       VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))
       `,
       {
-        replacements: [id, tokenHash],
-        type: QueryTypes.INSERT
+        replacements: [user.id, tokenHash],
+        type: QueryTypes.INSERT,
       }
     );
 
     // =========================
-    // Cookie sécurisé (local)
+    // 5️⃣ Secure cookie
     // =========================
     res.cookie("auth_token", token, {
       httpOnly: true,
-      sameSite: "Lax",   // OK en local
-      secure: false,     // ⚠️ true seulement en HTTPS
-      maxAge: 60 * 60 * 1000
+      sameSite: "Lax",
+      secure: false, // true in HTTPS
+      maxAge: 60 * 60 * 1000,
     });
 
     // =========================
-    // Renvoi de la C_MK + KDF info
+    // 6️⃣ Return crypto material
     // =========================
-    res.json({
+    return res.json({
       message: "Login successful",
       crypto: {
-        encrypted_master_key: Buffer.from(encrypted_master_key).toString("base64"),
-        kdf_salt: Buffer.from(kdf_salt).toString("base64"),
-      }
+        encrypted_master_key: Buffer.from(user.encrypted_master_key).toString(
+          "base64"
+        ),
+        kdf_salt: Buffer.from(user.kdf_salt).toString("base64"),
+      },
     });
-
-    req.log?.info({ userId: id }, "Login successful");
-
   } catch (error) {
     req.log?.error({ err: error }, "Login error");
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({
+      message: "Internal server error",
+    });
   }
 });
 
@@ -237,10 +289,7 @@ router.post("/logout", async (req, res) => {
       return res.status(204).send();
     }
 
-    const tokenHash = crypto
-      .createHash("sha256")
-      .update(token)
-      .digest();
+    const tokenHash = crypto.createHash("sha256").update(token).digest();
 
     await sequelize.query(
       `
@@ -249,7 +298,7 @@ router.post("/logout", async (req, res) => {
       `,
       {
         replacements: [tokenHash],
-        type: QueryTypes.DELETE
+        type: QueryTypes.DELETE,
       }
     );
 
@@ -257,11 +306,10 @@ router.post("/logout", async (req, res) => {
     res.clearCookie("auth_token", {
       httpOnly: true,
       sameSite: "Lax",
-      secure: false // true en HTTPS
+      secure: false, // true en HTTPS
     });
 
     return res.status(200).json({ message: "Logged out successfully" });
-
   } catch (error) {
     req.log?.error({ err: error }, "Logout error");
     return res.status(500).json({ message: "Internal server error" });
@@ -282,15 +330,16 @@ router.get("/verify-email", async (req, res) => {
   try {
     const [user] = await sequelize.query(
       `
-      SELECT id, is_verified
+      SELECT id, is_verified, token_expiry
       FROM users
       WHERE verification_token = :token
       `,
       {
         replacements: { token },
-        type: QueryTypes.SELECT
+        type: QueryTypes.SELECT,
       }
     );
+    console.log(user);
 
     if (!user) {
       return res
@@ -298,6 +347,24 @@ router.get("/verify-email", async (req, res) => {
         .send(renderPage("Invalid or expired verification token", true));
     }
 
+    // token expired
+    if (user.token_expiry < new Date()) {
+      await sequelize.query("DELETE FROM users WHERE id = :id", {
+        replacements: { id: user.id },
+        type: QueryTypes.DELETE,
+      });
+
+      return res
+        .status(400)
+        .send(
+          renderPage(
+            "Invalid or expired verification token, try registering again",
+            true
+          )
+        );
+    }
+
+    // already verified
     if (user.is_verified) {
       return res.send(
         renderPage("✅ Email already verified. You can now log in.")
@@ -306,26 +373,24 @@ router.get("/verify-email", async (req, res) => {
 
     await sequelize.query(
       `
-      UPDATE users
-      SET is_verified = true,
-          verification_token = NULL
-      WHERE id = :id
-      `,
+  UPDATE users
+  SET is_verified = true,
+      verification_token = NULL,
+      token_expiry = NULL
+  WHERE id = :id
+  `,
       {
         replacements: { id: user.id },
-        type: QueryTypes.UPDATE
+        type: QueryTypes.UPDATE,
       }
     );
 
     return res.send(
       renderPage("✅ Email verified successfully. You can now log in.")
     );
-
   } catch (error) {
     console.error("VERIFY EMAIL ERROR:", error);
-    return res
-      .status(500)
-      .send(renderPage("Internal server error", true));
+    return res.status(500).send(renderPage("Internal server error", true));
   }
 });
 
