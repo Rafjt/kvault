@@ -39,7 +39,7 @@ const onSubmit = async (e) => {
       // retour login après 1.5s
       setTimeout(() => {
         router.push('/login')
-      }, 1500)
+      }, 5000)
     }
   } catch {
     errorMessage.value = 'Network error'
