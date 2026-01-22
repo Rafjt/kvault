@@ -165,14 +165,14 @@ router.post("/register", Limiter, async (req, res) => {
       INSERT INTO users
         (login, hashed_master_password, kdf_salt, encrypted_master_key, is_verified, verification_token, token_expiry)
       VALUES
-        (:email, :hashedPassword, :kdfSalt, :encryptedMK, false, :verificationToken, DATE_ADD(NOW(), INTERVAL 30 MINUTE))
+        (:email, :hashedPassword, :kdfSalt, :encryptedMasterKey, false, :verificationToken, DATE_ADD(NOW(), INTERVAL 30 MINUTE))
       `,
       {
         replacements: {
           email,
           hashedPassword,
           kdfSalt,
-          encryptedMK,
+          encryptedMasterKey,
           verificationToken,
         },
         type: QueryTypes.INSERT,
