@@ -4,6 +4,7 @@ import { ref, onMounted } from 'vue'
 import { API_BASE_URL } from "../components/constant.js";
 import { useCryptoStore } from "../stores/crypto.store";
 import { useRouter } from "vue-router"
+import { deleteSecret } from '../function/function'
 
 const router = useRouter()
 
@@ -41,6 +42,21 @@ async function decryptSecret(ciphertextB64, nonceB64) {
 async function createsec() {
     router.push('/create')
 }
+
+async function handleDeleteSecret(secretId) {
+  try {
+    await deleteSecret(secretId)
+
+    secrets.value = secrets.value.filter(s => s.id !== secretId)
+
+    delete showValues.value[secretId]
+
+  } catch (err) {
+    console.error("Delete failed", err)
+    errorMessage.value = "Failed to delete secret"
+  }
+}
+
 
 const fetchSecrets = async () => {
   loading.value = true
@@ -137,7 +153,7 @@ onMounted(async () => {
           <button>
             Update
           </button>
-          <button>
+          <button @click="handleDeleteSecret(secret.id)">
             delete
           </button>
         </div>
