@@ -3,6 +3,7 @@ import Login from '../views/Login.vue'
 import Register from '../views/Register.vue'
 import Home from '../views/Home.vue'
 import Create from '../views/CreateSecret.vue'
+import Update from '../views/UpdateSecret.vue'
 
 
 const routes = [
@@ -10,7 +11,8 @@ const routes = [
   { path: '/login', name: 'login', component: Login },
   { path: '/register', name: 'register', component: Register },
   { path: '/home', name: 'home', component: Home, meta: { requiresAuth: true } },
-  { path: '/create', name: 'create', component: Create, meta: { requiresAuth: true } }
+  { path: '/create', name: 'create', component: Create, meta: { requiresAuth: true } },
+  { path: "/update/:id", name: "UpdateSecret", component: Update, meta: { requiresAuth: true } }
 ]
 
 const router = createRouter({

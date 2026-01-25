@@ -57,6 +57,10 @@ async function handleDeleteSecret(secretId) {
   }
 }
 
+async function handleUpdateSecret(secretId) {
+  router.push(`/update/${secretId}`)
+}
+
 
 const fetchSecrets = async () => {
   loading.value = true
@@ -150,7 +154,7 @@ onMounted(async () => {
           <button @click="toggleValue(secret.id)">
             {{ showValues[secret.id] ? 'Hide' : 'Show' }}
           </button>
-          <button>
+          <button @click="handleUpdateSecret(secret.id)">
             Update
           </button>
           <button @click="handleDeleteSecret(secret.id)">

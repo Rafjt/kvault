@@ -73,6 +73,50 @@ router.get("/secrets", authMiddleware, async (req, res) => {
   }
 });
 
+router.get("/secrets/:id", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const secretId = req.params.id;
+
+  try {
+    const secrets = await sequelize.query(
+      `
+      SELECT id, type, name, ciphertext, nonce, created_at, updated_at
+      FROM secrets
+      WHERE owner_id = ? AND id = ?
+      LIMIT 1
+      `,
+      {
+        replacements: [userId, secretId],
+        type: QueryTypes.SELECT
+      }
+    );
+
+    const secret = secrets[0];
+
+    if (!secret) {
+      return res.status(404).json({
+        message: "Secret not found"
+      });
+    }
+
+    const formattedSecret = {
+      id: secret.id,
+      type: secret.type,
+      name: secret.name,
+      ciphertext: Buffer.from(secret.ciphertext).toString("base64"),
+      nonce: Buffer.from(secret.nonce).toString("base64"),
+      created_at: secret.created_at,
+      updated_at: secret.updated_at
+    };
+
+    return res.status(200).json(formattedSecret);
+  } catch (error) {
+    req.log?.error({ err: error, userId }, "Get secret error");
+    return res.status(500).json({
+      message: "Internal server error"
+    });
+  }
+});
 
 /**
  * CREATE secret

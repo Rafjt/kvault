@@ -9,3 +9,19 @@ export async function deleteSecret(secret_id) {
     })
     
 }
+
+
+export async function fetchSecret(secret_id) {
+  const res = await fetch(`${API_BASE_URL}/secrets/${secret_id}`, {
+    method: "GET",
+    credentials: "include",
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to fetch secret")
+  }
+
+  return data
+}
