@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kvault-backend
+  namespace: kvault
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: kvault-backend
+  template:
+    metadata:
+      labels:
+        app: kvault-backend
+    spec:
+      containers:
+        - name: backend
+          image: kvault-backend:latest
+          imagePullPolicy: Never
+          env:
+            - name: DB_HOST
+              value: kvault-db
+            - name: DB_USER
+              value: kvault
+            - name: DB_PASSWORD
+              value: kvaultpass
+            - name: DB_NAME
+              value: kvault
+            - name: KVAULT_MAIL_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: kvault-mailer
+                  key: KVAULT_MAIL_PWD
+          ports:
+            - containerPort: 2111
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: kvault-backend
+  namespace: kvault
+spec:
+  selector:
+    app: kvault-backend
+  ports:
+    - port: 2111
+      targetPort: 2111
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kvault-mailer
+  namespace: kvault
+type: Opaque
+stringData:
+  KVAULT_MAIL_PWD: "ddow cbml cpjr hqsn"
+

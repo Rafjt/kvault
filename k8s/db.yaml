@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kvault-db
+  namespace: kvault
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kvault-db
+  template:
+    metadata:
+      labels:
+        app: kvault-db
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: rootpassword
+            - name: MYSQL_DATABASE
+              value: kvault
+            - name: MYSQL_USER
+              value: kvault
+            - name: MYSQL_PASSWORD
+              value: kvaultpass
+          ports:
+            - containerPort: 3306
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: kvault-db
+  namespace: kvault
+spec:
+  selector:
+    app: kvault-db
+  ports:
+    - port: 3306
+      targetPort: 3306
+

@@ -33,7 +33,7 @@ export const sendMail = async (to, subject, text, html) => {
 
 
 export const sendTokenMail = async (verificationToken, email) => {
-  const verificationLink = `http://localhost:2111/auth/verify-email?token=${verificationToken}`;
+  const verificationLink = `http://kvault.local/auth/verify-email?token=${verificationToken}`;
 
   await sendMail(
     email,
