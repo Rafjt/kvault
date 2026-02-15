@@ -1,0 +1,39 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kvault-ingress
+  namespace: kvault
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: kvault.local
+      http:
+        paths:
+
+          # FRONTEND
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kvault-frontend
+                port:
+                  number: 80
+
+          # AUTH
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: kvault-backend
+                port:
+                  number: 2111
+
+          # API
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: kvault-backend
+                port:
+                  number: 2111
+
