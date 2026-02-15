@@ -1,0 +1,42 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: kvault-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: "1234"
+      MYSQL_DATABASE: kvault
+      MYSQL_PASSWORD: "1234"
+    volumes:
+      - db_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+  backend:
+    build: ./backend
+    container_name: kvault-backend
+    restart: always
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_USER: kvault
+      DB_PASSWORD: "1234"
+      DB_NAME: kvault
+    ports:
+      - "2111:2111"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_AUTH_URL: http://kvault-backend:2111/auth
+        VITE_API_BASE_URL: http://kvault-backend:2111/api
+    container_name: kvault-frontend
+    restart: always
+    ports:
+      - "80:80"
+
+
+volumes:
+  db_data:
