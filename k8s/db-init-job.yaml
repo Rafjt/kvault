@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kvault-db-init-job
+  namespace: kvault
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mysql-client
+          image: mysql:8
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for MySQL..."
+              until mysql -h kvault-db -u kvault -pkvaultpass -e "SELECT 1"; do
+                sleep 5
+              done
+              echo "Running init script..."
+              mysql -h kvault-db -u kvault -pkvaultpass kvault < /sql/init.sql
+          volumeMounts:
+            - name: sql-volume
+              mountPath: /sql
+      volumes:
+        - name: sql-volume
+          configMap:
+            name: kvault-db-init
+
