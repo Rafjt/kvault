@@ -5,12 +5,16 @@ metadata:
   namespace: kvault
 spec:
   ingressClassName: nginx
+
+  tls:
+    - hosts:
+        - kvault.local
+      secretName: kvault-tls
+
   rules:
     - host: kvault.local
       http:
         paths:
-
-          # FRONTEND
           - path: /
             pathType: Prefix
             backend:
@@ -19,7 +23,6 @@ spec:
                 port:
                   number: 80
 
-          # AUTH
           - path: /auth
             pathType: Prefix
             backend:
@@ -28,7 +31,6 @@ spec:
                 port:
                   number: 2111
 
-          # API
           - path: /api
             pathType: Prefix
             backend:
