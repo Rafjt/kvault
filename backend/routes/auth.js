@@ -71,9 +71,17 @@ router.get('/me', authMiddleware, (req, res) => {
 
 router.post("/register", Limiter, async (req, res) => {
   const { email, password } = req.body;
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_\-+=~`[\]\\;/]).{12,}$/
 
   if (!email || !password) {
     return res.status(400).json({ error: "Email and password are required." });
+  }
+
+  if (!passwordRegex.test(password)) {
+    return res.status(400).json({
+      message:
+        "Password must contain at least 12 characters, uppercase, lowercase, number and special character"
+    })
   }
 
   if (!validator.isEmail(email)) {
