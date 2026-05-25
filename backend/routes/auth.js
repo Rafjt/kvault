@@ -11,6 +11,7 @@ const { Limiter } = require("../functions");
 const { hashPassword } = require("../functions/functions");
 const { sendTokenMail } = require("../functions/mailer");
 const { authMiddleware } = require("../middleware/auth.middleware.js");
+const argon2 = require("argon2");
 
 
 /* =========================================================
@@ -137,13 +138,27 @@ router.post("/register", Limiter, async (req, res) => {
     const masterKey = crypto.randomBytes(32);
 
     // Dérivation KEK
-    const kek = crypto.pbkdf2Sync(
-      password,
-      kdfSalt,
-      ITERATIONS,
-      32,
-      "sha256"
-    );
+    // const kek = crypto.pbkdf2Sync(
+    //   password,
+    //   kdfSalt,
+    //   ITERATIONS,
+    //   32,
+    //   "sha256"
+    // );
+
+    const kek = await argon2.hash(password, {
+      type: argon2.argon2id,
+
+      salt: kdfSalt,
+
+      memoryCost: 65536, // 64 MB
+      timeCost: 3,
+      parallelism: 1,
+
+      hashLength: 32,
+
+      raw: true
+    });
 
     // =========================
     // Chiffrement Master Key (AES-GCM)

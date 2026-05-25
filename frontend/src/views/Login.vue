@@ -3,6 +3,7 @@ import { ref } from "vue"
 import { useRouter } from "vue-router"
 import { useCryptoStore } from "../stores/crypto.store"
 import { API_AUTH_URL } from "../components/constant.js"
+import { argon2id } from 'hash-wasm'
 
 const router = useRouter()
 const cryptoStore = useCryptoStore()
@@ -63,28 +64,50 @@ const onSubmit = async (e) => {
     // =========================
     // PBKDF2 → KEK
     // =========================
-    const pwBytes = new TextEncoder().encode(password.value)
+    // const pwBytes = new TextEncoder().encode(password.value)
 
-    const keyMaterial = await crypto.subtle.importKey(
+    // const keyMaterial = await crypto.subtle.importKey(
+    //   "raw",
+    //   pwBytes,
+    //   "PBKDF2",
+    //   false,
+    //   ["deriveKey"]
+    // )
+
+    // const kek = await crypto.subtle.deriveKey(
+    //   {
+    //     name: "PBKDF2",
+    //     salt: kdfSalt,
+    //     iterations: ITERATIONS,
+    //     hash: "SHA-256"
+    //   },
+    //   keyMaterial,
+    //   { name: "AES-GCM", length: 256 },
+    //   false,
+    //   ["decrypt"]
+    // )
+
+
+    const kekRaw = await argon2id({
+      password: password.value,
+      salt: kdfSalt,
+      parallelism: 1,
+      iterations: 3,
+      memorySize: 65536,
+      hashLength: 32,
+      outputType: 'binary'
+    })
+
+
+    const kek = await crypto.subtle.importKey(
       "raw",
-      pwBytes,
-      "PBKDF2",
-      false,
-      ["deriveKey"]
-    )
-
-    const kek = await crypto.subtle.deriveKey(
-      {
-        name: "PBKDF2",
-        salt: kdfSalt,
-        iterations: ITERATIONS,
-        hash: "SHA-256"
-      },
-      keyMaterial,
-      { name: "AES-GCM", length: 256 },
+      kekRaw,
+      { name: "AES-GCM" },
       false,
       ["decrypt"]
     )
+
+    console.log(kek);
 
     // =========================
     // AES-GCM — DECHIFFRE MK
