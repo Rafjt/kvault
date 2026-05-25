@@ -12,7 +12,9 @@ const routes = [
   { path: '/register', name: 'register', component: Register },
   { path: '/home', name: 'home', component: Home, meta: { requiresAuth: true } },
   { path: '/create', name: 'create', component: Create, meta: { requiresAuth: true } },
-  { path: "/update/:id", name: "UpdateSecret", component: Update, meta: { requiresAuth: true } }
+  { path: "/update/:id", name: "UpdateSecret", component: Update, meta: { requiresAuth: true } },
+// Captulle toutes les routes non trouvées et redirige
+  { path: '/:catchAll(.*)', redirect: '/login' }
 ]
 
 const router = createRouter({
