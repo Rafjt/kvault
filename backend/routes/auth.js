@@ -137,15 +137,6 @@ router.post("/register", Limiter, async (req, res) => {
     // Master Key aléatoire (indépendante du mot de passe)
     const masterKey = crypto.randomBytes(32);
 
-    // Dérivation KEK
-    // const kek = crypto.pbkdf2Sync(
-    //   password,
-    //   kdfSalt,
-    //   ITERATIONS,
-    //   32,
-    //   "sha256"
-    // );
-
     const kek = await argon2.hash(password, {
       type: argon2.argon2id,
 
