@@ -62,31 +62,8 @@ const onSubmit = async (e) => {
     )
 
     // =========================
-    // PBKDF2 → KEK
+    // ARGON2 → KEK
     // =========================
-    // const pwBytes = new TextEncoder().encode(password.value)
-
-    // const keyMaterial = await crypto.subtle.importKey(
-    //   "raw",
-    //   pwBytes,
-    //   "PBKDF2",
-    //   false,
-    //   ["deriveKey"]
-    // )
-
-    // const kek = await crypto.subtle.deriveKey(
-    //   {
-    //     name: "PBKDF2",
-    //     salt: kdfSalt,
-    //     iterations: ITERATIONS,
-    //     hash: "SHA-256"
-    //   },
-    //   keyMaterial,
-    //   { name: "AES-GCM", length: 256 },
-    //   false,
-    //   ["decrypt"]
-    // )
-
 
     const kekRaw = await argon2id({
       password: password.value,
