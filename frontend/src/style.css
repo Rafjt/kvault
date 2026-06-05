@@ -66,20 +66,6 @@ label {
   font-weight: 500;
 }
 
-input {
-  padding: 0.6rem;
-  border-radius: 6px;
-  border: none;
-  background-color: var(--input-bg);
-  color: var(--text-color);
-  outline: none;
-  transition: 0.2s;
-}
-
-input:focus {
-  border: 2px solid var(--primary-color);
-}
-
 a {
   color: var(--primary-color);
   text-decoration: none;
@@ -172,7 +158,9 @@ label {
   font-weight: 500;
 }
 
-input {
+input,
+select,
+textarea {
   padding: 0.6rem;
   border-radius: 6px;
   border: none;
@@ -180,10 +168,21 @@ input {
   color: var(--text-color);
   outline: none;
   transition: 0.2s;
+  font-family: inherit;
+  font-size: 1rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-input:focus {
+input:focus,
+select:focus,
+textarea:focus {
   border: 2px solid var(--primary-color);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 100px;
 }
 
 a {
@@ -303,4 +302,45 @@ button:hover {
 
 .create-btn:hover {
   background: #1f2937;
+}
+
+/* === BARRE FILTRES === */
+.secrets-controls {
+  display: flex;
+  gap: 1rem;
+  margin: 1rem 0 2rem 0;
+}
+
+/* 50 / 50 */
+.search-box,
+.filter-box {
+  flex: 1;
+}
+
+/* INPUT SEARCH lisible */
+.search-box input {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background-color: var(--input-bg);
+  color: var(--text-color); /* <-- IMPORTANT */
+  outline: none;
+}
+
+/* SELECT filtre propre */
+.filter-box select {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  outline: none;
+}
+
+/* focus visible */
+.search-box input:focus,
+.filter-box select:focus {
+  border-color: var(--primary-color);
 }
