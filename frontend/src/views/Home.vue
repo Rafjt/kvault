@@ -1,6 +1,6 @@
 <script setup>
 // TODO: voir pk le déchiffrement marche pas 
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { API_BASE_URL } from "../components/constant.js";
 import { useCryptoStore } from "../stores/crypto.store";
 import { useRouter } from "vue-router"
@@ -14,6 +14,9 @@ const secrets = ref([])
 const loading = ref(false)
 const errorMessage = ref('')
 const showValues = ref({}) // toggle pour chaque secret
+const searchQuery = ref('')
+const selectedType = ref('all')
+
 
 // Déchiffre AES-GCM (ciphertext Base64) avec masterKey
 async function decryptSecret(ciphertextB64, nonceB64) {
@@ -104,6 +107,18 @@ const toggleValue = (id) => {
   showValues.value[id] = !showValues.value[id]
 }
 
+const filteredSecrets = computed(() => {
+  return secrets.value.filter((s) => {
+    const matchType =
+      selectedType.value === 'all' || s.type === selectedType.value
+
+    const matchSearch =
+      s.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+
+    return matchType && matchSearch
+  })
+})
+
 onMounted(async () => {
   // Attendre que la masterKey soit prête
   if (!cryptoStore.masterKey) {
@@ -126,13 +141,33 @@ onMounted(async () => {
       {{ errorMessage }}
     </div>
 
-    <div v-if="!loading && secrets.length === 0">
-      <p>No secrets found.</p>
+    <div v-if="!loading && filteredSecrets.length === 0">
+      <p>No matching secrets found.</p>
+    </div>
+
+    <div class="secrets-controls">
+      <div class="search-box">
+        <input
+          v-model="searchQuery"
+          placeholder="Search by name..."
+        />
+      </div>
+
+      <div class="filter-box">
+        <select v-model="selectedType">
+          <option value="all">All types</option>
+          <option value="text">Text</option>
+          <option value="password">Password</option>
+          <option value="token">Token</option>
+          <option value="identifier">Identifier</option>
+          <option value="note">Note</option>
+        </select>
+      </div>
     </div>
 
     <ul v-if="secrets.length > 0" class="secrets-list">
       <li
-        v-for="secret in secrets"
+        v-for="secret in filteredSecrets"
         :key="secret.id"
         class="secret-card"
       >

@@ -73,7 +73,7 @@ async function submitSecret() {
 <template>
   <div style="max-width: 480px; margin: auto">
     <button @click="back_home()">
-        Cancel
+        ← Cancel
     </button>
     <h2>Create a secret</h2>
 
