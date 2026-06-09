@@ -71,7 +71,7 @@ router.get('/me', authMiddleware, (req, res) => {
 /* ========================= REGISTER ========================= */
 
 router.post("/register", Limiter, async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, encMK, kdfSalt } = req.body;
   const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_\-+=~`[\]\\;/]).{12,}$/
 
   if (!email || !password) {
@@ -131,45 +131,45 @@ router.post("/register", Limiter, async (req, res) => {
     // Crypto setup
     // =========================
     const verificationToken = crypto.randomBytes(32).toString("hex");
-    const kdfSalt = crypto.randomBytes(16);
-    const ITERATIONS = 210_000;
+    // const kdfSalt = crypto.randomBytes(16);
+    // const ITERATIONS = 210_000;
 
-    // Master Key aléatoire (indépendante du mot de passe)
-    const masterKey = crypto.randomBytes(32);
+    // // Master Key aléatoire (indépendante du mot de passe)
+    // const masterKey = crypto.randomBytes(32);
 
-    const kek = await argon2.hash(password, {
-      type: argon2.argon2id,
+    // const kek = await argon2.hash(password, {
+    //   type: argon2.argon2id,
 
-      salt: kdfSalt,
+    //   salt: kdfSalt,
 
-      memoryCost: 65536, // 64 MB
-      timeCost: 3,
-      parallelism: 1,
+    //   memoryCost: 65536, // 64 MB
+    //   timeCost: 3,
+    //   parallelism: 1,
 
-      hashLength: 32,
+    //   hashLength: 32,
 
-      raw: true
-    });
+    //   raw: true
+    // });
 
-    // =========================
-    // Chiffrement Master Key (AES-GCM)
-    // =========================
-    const iv = crypto.randomBytes(12); // nonce GCM
-    const cipher = crypto.createCipheriv("aes-256-gcm", kek, iv);
+    // // =========================
+    // // Chiffrement Master Key (AES-GCM)
+    // // =========================
+    // const iv = crypto.randomBytes(12); // nonce GCM
+    // const cipher = crypto.createCipheriv("aes-256-gcm", kek, iv);
 
-    const ciphertext = Buffer.concat([
-      cipher.update(masterKey),
-      cipher.final()
-    ]);
+    // const ciphertext = Buffer.concat([
+    //   cipher.update(masterKey),
+    //   cipher.final()
+    // ]);
 
-    const authTag = cipher.getAuthTag();
+    // const authTag = cipher.getAuthTag();
 
-    // FORMAT CANONIQUE : IV || CIPHERTEXT || TAG
-    const encryptedMasterKey = Buffer.concat([
-      iv,
-      ciphertext,
-      authTag
-    ]);
+    // // FORMAT CANONIQUE : IV || CIPHERTEXT || TAG
+    // const encryptedMasterKey = Buffer.concat([
+    //   iv,
+    //   ciphertext,
+    //   authTag
+    // ]);
 
     // =========================
     // Insert DB
@@ -179,14 +179,14 @@ router.post("/register", Limiter, async (req, res) => {
       INSERT INTO users
         (login, hashed_master_password, kdf_salt, encrypted_master_key, is_verified, verification_token, token_expiry)
       VALUES
-        (:email, :hashedPassword, :kdfSalt, :encryptedMasterKey, false, :verificationToken, DATE_ADD(NOW(), INTERVAL 30 MINUTE))
+        (:email, :hashedPassword, :kdfSalt, :encMK, false, :verificationToken, DATE_ADD(NOW(), INTERVAL 30 MINUTE))
       `,
       {
         replacements: {
           email,
           hashedPassword,
-          kdfSalt,
-          encryptedMasterKey,
+          kdfSalt: Buffer.from(kdfSalt, 'base64'),
+          encMK: Buffer.from(encMK, 'base64'),
           verificationToken,
         },
         type: QueryTypes.INSERT,
