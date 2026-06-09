@@ -14,8 +14,6 @@ const loading = ref(false)
 const errorMessage = ref("")
 const successMessage = ref("")
 
-const ITERATIONS = 210_000
-
 const onSubmit = async (e) => {
   e.preventDefault()
   errorMessage.value = ""
@@ -88,26 +86,23 @@ const onSubmit = async (e) => {
 
     // =========================
     // AES-GCM — DECHIFFRE MK
-    // FORMAT: IV (12) || CIPHERTEXT || TAG (16)
     // =========================
+    // 1. Les 12 premiers octets pour l'IV
     const iv = encryptedMKFull.slice(0, 12)
-    const ciphertext = encryptedMKFull.slice(12, encryptedMKFull.length - 16)
-    const authTag = encryptedMKFull.slice(encryptedMKFull.length - 16)
 
-    const ciphertextWithTag = new Uint8Array(ciphertext.length + authTag.length)
-    ciphertextWithTag.set(ciphertext, 0)
-    ciphertextWithTag.set(authTag, ciphertext.length)
+    // 2. TOUT le reste (le ciphertext ET le tag d'authentification combinés)
+    const encryptedDataWithoutIv = encryptedMKFull.slice(12)
 
     const decryptedMKBuffer = await crypto.subtle.decrypt(
       {
         name: "AES-GCM",
-        iv,
-        tagLength: 128
+        iv: iv,
+        tagLength: 128 // Optionnel (128 bits / 16 octets est la valeur par défaut)
       },
       kek,
-      ciphertextWithTag
+      encryptedDataWithoutIv // On passe le bloc complet
     )
-
+    
     // =========================
     // Import Master Key (AES-GCM)
     // =========================

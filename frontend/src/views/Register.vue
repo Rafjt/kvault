@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { API_AUTH_URL } from "../components/constant.js";
+import { argon2id } from 'hash-wasm'
 
 const router = useRouter()
 
@@ -12,6 +13,11 @@ const confirmPassword = ref('')
 const errorMessage = ref('')
 const successMessage = ref('')
 const loading = ref(false)
+
+const arrayBufferToBase64 = (buffer) => {
+  const bytes = new Uint8Array(buffer)
+  return btoa(String.fromCharCode(...bytes))
+}
 
 const passwordRules = computed(() => ({
   minLength: password.value.length >= 12,
@@ -31,58 +37,71 @@ const passwordsMatch = computed(() =>
 
 const onSubmit = async (e) => {
   e.preventDefault()
-
   errorMessage.value = ''
   successMessage.value = ''
 
-  // Password policy
-  if (!isPasswordValid.value) {
-    errorMessage.value =
-      'Password policy not respected'
-    return
-  }
-
-  // Confirmation check
-  if (!passwordsMatch.value) {
-    errorMessage.value =
-      'Passwords do not match'
+  if (!isPasswordValid.value || !passwordsMatch.value) {
+    errorMessage.value = 'Form validation failed'
     return
   }
 
   loading.value = true
 
   try {
+    // 1. Génération du matos crypto
+    const masterKey = crypto.getRandomValues(new Uint8Array(32))
+    const kdfSalt = crypto.getRandomValues(new Uint8Array(16))
+    const iv = crypto.getRandomValues(new Uint8Array(12))
+
+    // 2. Dérivation de la KEK
+    const kekRaw = await argon2id({
+      password: password.value,
+      salt: kdfSalt,
+      parallelism: 1,
+      iterations: 3,
+      memorySize: 65536,
+      hashLength: 32,
+      outputType: 'binary'
+    })
+
+    const kek = await crypto.subtle.importKey(
+      "raw", kekRaw, { name: "AES-GCM" }, false, ["encrypt"]
+    )
+
+    // 3. Chiffrement de la Master Key
+    const encryptedMK = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv }, kek, masterKey
+    )
+
+    // 4. Assemblage : IV + CIPHERTEXT
+    const encryptedMasterKey = new Uint8Array(iv.length + encryptedMK.byteLength)
+    encryptedMasterKey.set(iv, 0)
+    encryptedMasterKey.set(new Uint8Array(encryptedMK), iv.length)
+
+    // 5. Envoi au serveur (L'encodage est délégué proprement ici sans polluer les variables)
     const res = await fetch(`${API_AUTH_URL}/register`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({
         email: email.value,
-        password: password.value
+        password: password.value,
+        encMK: arrayBufferToBase64(encryptedMasterKey), // Nettoyé ✨
+        kdfSalt: arrayBufferToBase64(kdfSalt)           // Nettoyé ✨
       })
     })
 
     const data = await res.json().catch(() => ({}))
 
     if (!res.ok) {
-      errorMessage.value =
-        data.message ||
-        data.error ||
-        data.errors ||
-        'Registration failed'
+      errorMessage.value = data.message || 'Registration failed'
     } else {
-      successMessage.value =
-        data.message ||
-        'Registration successful. Check your email.'
-
-      setTimeout(() => {
-        router.push('/login')
-      }, 5000)
+      successMessage.value = data.message || 'Registration successful.'
+      setTimeout(() => { router.push('/login') }, 5000)
     }
-  } catch {
-    errorMessage.value = 'Network error'
+  } catch (err) {
+    errorMessage.value = 'An error occurred during registration'
+    console.error(err)
   } finally {
     loading.value = false
   }
