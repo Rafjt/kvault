@@ -1,0 +1,228 @@
+---
+# ============================================================
+# MinIO Secret
+# Store credentials here — referenced by both MinIO and the
+# backup CronJob so there's a single source of truth.
+# ============================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kvault-minio-secrets
+  namespace: kvault
+type: Opaque
+stringData:
+  # Change these before deploying!
+  root-user: "kvault-admin"
+  root-password: "changeme-strong-password"
+  # Scoped access key for the backup job (write-only policy applied below)
+  backup-access-key: "kvault-backup"
+  backup-secret-key: "changeme-backup-secret"
+
+---
+# ============================================================
+# MinIO PersistentVolumeClaim
+# Adjust storage size to your needs.
+# ============================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kvault-minio-pvc
+  namespace: kvault
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# ============================================================
+# MinIO Deployment
+# Single-node MinIO — sufficient for a self-hosted vault.
+# For production HA, switch to the MinIO Operator with a
+# distributed tenant (4+ nodes).
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kvault-minio
+  namespace: kvault
+  labels:
+    app: kvault-minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kvault-minio
+  strategy:
+    type: Recreate # Required for ReadWriteOnce PVCs
+  template:
+    metadata:
+      labels:
+        app: kvault-minio
+    spec:
+      containers:
+        - name: minio
+          image: quay.io/minio/minio:latest
+          args:
+            - server
+            - /data
+            - --console-address
+            - ":9001"
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kvault-minio-secrets
+                  key: root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kvault-minio-secrets
+                  key: root-password
+          ports:
+            - name: api
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          volumeMounts:
+            - name: minio-storage
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: minio-storage
+          persistentVolumeClaim:
+            claimName: kvault-minio-pvc
+
+---
+# ============================================================
+# MinIO Services
+# - api: used internally by the backup CronJob (ClusterIP)
+# - console: expose externally only if you need the Web UI
+#   (consider keeping it ClusterIP + port-forward for security)
+# ============================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: kvault-minio
+  namespace: kvault
+spec:
+  selector:
+    app: kvault-minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001
+  type: ClusterIP
+
+---
+# ============================================================
+# MinIO Init Job
+# Runs once after MinIO is deployed to:
+#   1. Create the backup bucket
+#   2. Create a scoped service account (backup-access-key)
+#   3. Attach a write-only policy to that account
+#
+# This means the backup CronJob credentials can only upload —
+# they cannot list, read, or delete existing backups.
+# Even if the key leaks, past backups are safe.
+# ============================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kvault-minio-init
+  namespace: kvault
+  annotations:
+    # Re-run manually with: kubectl delete job kvault-minio-init -n kvault
+    # then kubectl apply -f minio-deployment.yaml
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc-init
+          image: quay.io/minio/mc:latest
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kvault-minio-secrets
+                  key: root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kvault-minio-secrets
+                  key: root-password
+            - name: BACKUP_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kvault-minio-secrets
+                  key: backup-access-key
+            - name: BACKUP_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kvault-minio-secrets
+                  key: backup-secret-key
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              echo "[INFO] Waiting for MinIO to be ready..."
+              until mc alias set myminio http://kvault-minio:9000 \
+                "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+                sleep 3
+              done
+
+              echo "[INFO] Creating backup bucket..."
+              mc mb --ignore-existing myminio/kvault-backups
+
+              echo "[INFO] Enabling versioning on bucket (protects against overwrites)..."
+              mc version enable myminio/kvault-backups
+
+              echo "[INFO] Creating scoped backup user..."
+              mc admin user add myminio "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY"
+
+              echo "[INFO] Applying write-only policy..."
+              # This policy allows upload only — no listing, no reading, no deletion
+              cat > /tmp/write-only-policy.json << 'EOF'
+              {
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Action": ["s3:PutObject"],
+                    "Resource": ["arn:aws:s3:::kvault-backups/*"]
+                  }
+                ]
+              }
+              EOF
+
+              mc admin policy create myminio backup-write-only /tmp/write-only-policy.json
+              mc admin policy attach myminio backup-write-only --user "$BACKUP_ACCESS_KEY"
+
+              echo "[INFO] MinIO init complete."
+              echo "[INFO] Bucket: kvault-backups"
+              echo "[INFO] Backup user '$BACKUP_ACCESS_KEY' has write-only access."
