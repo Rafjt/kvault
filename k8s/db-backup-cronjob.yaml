@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kvault-backup
+  namespace: kvault
+spec:
+  schedule: "0 0 * * 0" # Runs every Sunday at midnight
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: backup
+              image: mysql:8
+              env:
+                - name: MYSQL_PWD
+                  valueFrom:
+                    secretKeyRef:
+                      name: kvault-db-secrets
+                      key: user-password  # Ensure this key exists!
+                - name: BACKUP_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: kvault-db-secrets
+                      key: kvault-backup-key # Ensure this key exists!
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e # Exit immediately if any pipeline command fails
+                  
+                  DATE=$(date +%Y%m%d-%H%M%S)
+                  BACKUP_FILE="/backup/kvault-${DATE}.sql.gz.enc"
+                  
+                  echo "[INFO] Starting backup at $(date)"
+                  
+                  # 1. Dump database 
+                  # 2. Gzip the plaintext (high compression)
+                  # 3. Encrypt the compressed archive (secure binary output)
+                  mysqldump --no-tablespaces \
+                    -h kvault-db \
+                    -u kvault \
+                    kvault \
+                    | gzip \
+                    | openssl enc -aes-256-cbc -pbkdf2 -pass env:BACKUP_KEY \
+                    > "${BACKUP_FILE}"
+
+                  echo "[INFO] Backup completed successfully."
+                  ls -lh "${BACKUP_FILE}"
+
+                  echo "[INFO] Current backups in storage:"
+                  ls -lh /backup
+              volumeMounts:
+                - name: backup-storage
+                  mountPath: /backup
+          volumes:
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: kvault-backup-pvc
+          restartPolicy: OnFailure

@@ -18,13 +18,19 @@ spec:
           image: mysql:8.0
           env:
             - name: MYSQL_ROOT_PASSWORD
-              value: rootpassword
+              valueFrom:
+                secretKeyRef:
+                  name: kvault-db-secrets
+                  key: root-password
             - name: MYSQL_DATABASE
               value: kvault
             - name: MYSQL_USER
               value: kvault
             - name: MYSQL_PASSWORD
-              value: kvaultpass
+              valueFrom:
+                secretKeyRef:
+                  name: kvault-db-secrets
+                  key: user-password
           ports:
             - containerPort: 3306
 
@@ -41,4 +47,3 @@ spec:
   ports:
     - port: 3306
       targetPort: 3306
-

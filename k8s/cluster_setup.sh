@@ -36,7 +36,6 @@ fi
 wait
 echo "✅ Images chargées avec succès."
 
-# 2. Remplacement du 'sleep 120' par une attente intelligente de l'Ingress
 echo "⏳ Attente du contrôleur Ingress NGINX..."
 kubectl wait --namespace ingress-nginx \
   --for=condition=ready pod \
@@ -44,7 +43,13 @@ kubectl wait --namespace ingress-nginx \
   --timeout=90s
 
 echo "💾 Déploiement de la base de données..."
+###### ajout de la partie secret
+kubectl apply -f secret-db.yaml
+######
 kubectl apply -f db.yaml -n kvault
+kubectl apply -f db-backup-pvc.yaml
+kubectl apply -f db-backup-cronjob.yaml
+
 
 # Attente que le Pod DB soit prêt
 kubectl wait --for=condition=ready pod -l app=kvault-db -n kvault --timeout=120s
@@ -62,5 +67,6 @@ echo "🚀 Déploiement du Frontend, Backend et Ingress..."
 kubectl apply -f backend.yaml -n kvault
 kubectl apply -f frontend.yaml -n kvault
 kubectl apply -f ingress.yaml -n kvault
+# AJOUTER LA PARTIE BACKUP DE DB
 
 echo "🎉 Déploiement terminé avec succès !"
