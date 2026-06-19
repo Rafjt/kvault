@@ -1,10 +1,21 @@
+---
+# ============================================================
+# DB Backup CronJob — MinIO edition
+#
+# Pipeline:
+#   mysqldump → gzip → openssl enc → mc cp → MinIO bucket
+#
+# The backup credentials are write-only (see minio-deployment.yaml).
+# The encryption key is separate from the transfer credentials,
+# so even someone with the MinIO key cannot decrypt the dumps.
+# ============================================================
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: kvault-backup
   namespace: kvault
 spec:
-  schedule: "0 0 * * 0" # Runs every Sunday at midnight
+  schedule: "0 0 * * 0" # Every Sunday at midnight
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 5
@@ -12,52 +23,102 @@ spec:
     spec:
       template:
         spec:
-          containers:
-            - name: backup
+          initContainers:
+            # -------------------------------------------------------
+            # Init container: produce the encrypted dump into a shared
+            # emptyDir volume. Uses mysql:8 which has mysqldump and
+            # openssl available.
+            # -------------------------------------------------------
+            - name: dump
               image: mysql:8
               env:
                 - name: MYSQL_PWD
                   valueFrom:
                     secretKeyRef:
                       name: kvault-db-secrets
-                      key: user-password  # Ensure this key exists!
+                      key: user-password
                 - name: BACKUP_KEY
                   valueFrom:
                     secretKeyRef:
                       name: kvault-db-secrets
-                      key: kvault-backup-key # Ensure this key exists!
+                      key: kvault-backup-key
               command:
                 - /bin/sh
                 - -c
                 - |
-                  set -e # Exit immediately if any pipeline command fails
-                  
+                  set -e
+
                   DATE=$(date +%Y%m%d-%H%M%S)
-                  BACKUP_FILE="/backup/kvault-${DATE}.sql.gz.enc"
-                  
-                  echo "[INFO] Starting backup at $(date)"
-                  
-                  # 1. Dump database 
-                  # 2. Gzip the plaintext (high compression)
-                  # 3. Encrypt the compressed archive (secure binary output)
+                  BACKUP_FILE="/scratch/kvault-${DATE}.sql.gz.enc"
+
+                  # Store filename for the upload container
+                  echo "$BACKUP_FILE" > /scratch/backup-path.txt
+
+                  echo "[INFO] Starting dump at $(date)"
+
                   mysqldump --no-tablespaces \
                     -h kvault-db \
                     -u kvault \
                     kvault \
                     | gzip \
                     | openssl enc -aes-256-cbc -pbkdf2 -pass env:BACKUP_KEY \
-                    > "${BACKUP_FILE}"
+                    > "$BACKUP_FILE"
 
-                  echo "[INFO] Backup completed successfully."
-                  ls -lh "${BACKUP_FILE}"
-
-                  echo "[INFO] Current backups in storage:"
-                  ls -lh /backup
+                  echo "[INFO] Dump complete: $(ls -lh $BACKUP_FILE)"
               volumeMounts:
-                - name: backup-storage
-                  mountPath: /backup
+                - name: scratch
+                  mountPath: /scratch
+
+          containers:
+            # -------------------------------------------------------
+            # Main container: upload the encrypted dump to MinIO.
+            # Uses the MinIO client (mc) image.
+            # Write-only credentials — cannot read existing backups.
+            # -------------------------------------------------------
+            - name: upload
+              image: quay.io/minio/mc:latest
+              env:
+                - name: MINIO_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: kvault-minio-secrets
+                      key: backup-access-key
+                - name: MINIO_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: kvault-minio-secrets
+                      key: backup-secret-key
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+
+                  BACKUP_FILE=$(cat /scratch/backup-path.txt)
+                  FILENAME=$(basename "$BACKUP_FILE")
+
+                  echo "[INFO] Configuring MinIO client..."
+                  mc alias set myminio http://kvault-minio:9000 \
+                    "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"
+
+                  echo "[INFO] Uploading $FILENAME to MinIO..."
+                  mc cp "$BACKUP_FILE" "myminio/kvault-backups/$FILENAME"
+
+                  echo "[INFO] Upload complete."
+
+                  # Clean up scratch (good practice even though emptyDir
+                  # is ephemeral — avoids the encrypted dump sitting around
+                  # longer than necessary)
+                  rm "$BACKUP_FILE"
+                  echo "[INFO] Scratch cleared."
+              volumeMounts:
+                - name: scratch
+                  mountPath: /scratch
+
           volumes:
-            - name: backup-storage
-              persistentVolumeClaim:
-                claimName: kvault-backup-pvc
+            # Shared ephemeral volume between init and main container.
+            # Lives only for the duration of the pod — never persisted.
+            - name: scratch
+              emptyDir: {}
+
           restartPolicy: OnFailure
