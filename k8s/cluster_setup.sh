@@ -43,10 +43,13 @@ kubectl wait --namespace ingress-nginx \
   --timeout=90s
 
 echo "💾 Déploiement de la base de données..."
-###### ajout de la partie secret
 kubectl apply -f secret-db.yaml
-######
 kubectl apply -f db.yaml -n kvault
+
+
+echo "🚑 Déploiement du système de backup de la DB..."
+kubectl apply -f secret-minio.yaml 
+kubectl apply -f minio-deployment.yaml 
 kubectl apply -f db-backup-pvc.yaml
 kubectl apply -f db-backup-cronjob.yaml
 
