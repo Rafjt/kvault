@@ -1,24 +1,3 @@
----
-# ============================================================
-# MinIO Secret
-# Store credentials here — referenced by both MinIO and the
-# backup CronJob so there's a single source of truth.
-# ============================================================
-apiVersion: v1
-kind: Secret
-metadata:
-  name: kvault-minio-secrets
-  namespace: kvault
-type: Opaque
-stringData:
-  # Change these before deploying!
-  root-user: "kvault-admin"
-  root-password: "changeme-strong-password"
-  # Scoped access key for the backup job (write-only policy applied below)
-  backup-access-key: "kvault-backup"
-  backup-secret-key: "changeme-backup-secret"
-
----
 # ============================================================
 # MinIO PersistentVolumeClaim
 # Adjust storage size to your needs.
