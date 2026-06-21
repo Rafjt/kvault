@@ -5,7 +5,7 @@ metadata:
   namespace: kvault
 data:
   init.sql: |
-    CREATE TABLE users (
+    CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
         login VARCHAR(255) NOT NULL UNIQUE,
         hashed_master_password VARCHAR(255) NOT NULL,
@@ -28,7 +28,7 @@ data:
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB;
 
-    CREATE TABLE secrets (
+    CREATE TABLE IF NOT EXISTS secrets (
         id INT AUTO_INCREMENT PRIMARY KEY,
         owner_id INT NOT NULL,
 
@@ -48,7 +48,7 @@ data:
             ON DELETE CASCADE
     ) ENGINE=InnoDB;
 
-    CREATE TABLE auth_tokens (
+    CREATE TABLE IF NOT EXISTS auth_tokens (
         id INT AUTO_INCREMENT PRIMARY KEY,
         user_id INT NOT NULL,
 

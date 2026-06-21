@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 
 # Quitter immédiatement si une commande échoue
 set -euo pipefail # Le -u lève une erreur si une variable est vide, le -o pipefail sécurise les pipes
@@ -53,10 +53,18 @@ kubectl wait --for=condition=ready pod -l app=kvault-db -n kvault --timeout=120s
 echo "🏗️ Initialisation de la base de données..."
 kubectl apply -f db-init-configmap.yaml -n kvault
 # Suppression d'un éventuel ancien Job pour éviter les erreurs au second lancement
-kubectl delete job kvault-db-init-job -n kvault --ignore-not-found
+kubectl delete job kvault-db-init-job \
+  -n kvault \
+  --ignore-not-found \
+  --wait=true
 
 kubectl apply -f db-init-job.yaml -n kvault
-kubectl wait --for=condition=complete job/kvault-db-init-job -n kvault --timeout=120s
+
+kubectl wait \
+  --for=condition=complete \
+  job/kvault-db-init-job \
+  -n kvault \
+  --timeout=120s
 
 echo "🚀 Déploiement du Frontend, Backend et Ingress..."
 kubectl apply -f backend.yaml -n kvault
