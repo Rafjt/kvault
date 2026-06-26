@@ -55,6 +55,7 @@ const onSubmit = async (e) => {
     const masterKey = crypto.getRandomValues(new Uint8Array(32))
     const kdfSalt = crypto.getRandomValues(new Uint8Array(16))
     const iv = crypto.getRandomValues(new Uint8Array(12))
+    const privateKeyIv = crypto.getRandomValues(new Uint8Array(12))
 
     // 2. Dérivation de la KEK
     const kekRaw = await argon2id({
@@ -81,7 +82,52 @@ const onSubmit = async (e) => {
     encryptedMasterKey.set(iv, 0)
     encryptedMasterKey.set(new Uint8Array(encryptedMK), iv.length)
 
-    // 5. Envoi au serveur (L'encodage est délégué proprement ici sans polluer les variables)
+    // 5. Génération de la bi-clé RSA
+    const rsaKeyPair = await crypto.subtle.generateKey(
+      {
+        name: "RSA-OAEP",
+        modulusLength: 4096,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: "SHA-256"
+      },
+      true,
+      ["encrypt", "decrypt"]
+    )
+
+    // 6. Exports des clées
+    const publicKeySpki = await crypto.subtle.exportKey(
+      "spki",
+      rsaKeyPair.publicKey
+    )
+
+    const privateKeyPkcs8 = await crypto.subtle.exportKey(
+      "pkcs8",
+      rsaKeyPair.privateKey
+    )
+
+    // 7. Chiffrement de la clé privée 
+    const encryptedPrivateKey = await crypto.subtle.encrypt(
+      {
+        name: "AES-GCM",
+        iv: privateKeyIv
+      },
+      kek,
+      privateKeyPkcs8
+    )
+
+    // 8. Concaténation IV + Ciphertext (partie privé)
+    const encryptedPrivateKeyBlob = new Uint8Array(
+      privateKeyIv.length + encryptedPrivateKey.byteLength
+    )
+
+    encryptedPrivateKeyBlob.set(privateKeyIv, 0)
+
+    encryptedPrivateKeyBlob.set(
+      new Uint8Array(encryptedPrivateKey),
+      privateKeyIv.length
+    )
+
+    // . Envoi au serveur (L'encodage est délégué proprement ici sans polluer les variables)
     const res = await fetch(`${API_AUTH_URL}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -89,8 +135,12 @@ const onSubmit = async (e) => {
       body: JSON.stringify({
         email: email.value,
         password: password.value,
-        encMK: arrayBufferToBase64(encryptedMasterKey), // Nettoyé ✨
-        kdfSalt: arrayBufferToBase64(kdfSalt)           // Nettoyé ✨
+        encMK: arrayBufferToBase64(encryptedMasterKey),
+        kdfSalt: arrayBufferToBase64(kdfSalt),
+        
+        rsaPublicKey: arrayBufferToBase64(publicKeySpki),
+        encPrivateKey: arrayBufferToBase64(encryptedPrivateKeyBlob)
+
       })
     })
 

@@ -71,7 +71,7 @@ router.get('/me', authMiddleware, (req, res) => {
 /* ========================= REGISTER ========================= */
 
 router.post("/register", Limiter, async (req, res) => {
-  const { email, password, encMK, kdfSalt } = req.body;
+  const { email, password, encMK, kdfSalt,rsaPublicKey,encPrivateKey } = req.body;
   const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_\-+=~`[\]\\;/]).{12,}$/
 
   if (!email || !password) {
@@ -87,6 +87,10 @@ router.post("/register", Limiter, async (req, res) => {
 
   if (!validator.isEmail(email)) {
     return res.status(400).json({ error: "Invalid email format." });
+  }
+
+  if (!rsaPublicKey || !encPrivateKey) {
+    return res.status(400).json({ error: "RSA Key-Pair required." });
   }
 
   try {
@@ -177,9 +181,9 @@ router.post("/register", Limiter, async (req, res) => {
     await sequelize.query(
       `
       INSERT INTO users
-        (login, hashed_master_password, kdf_salt, encrypted_master_key, is_verified, verification_token, token_expiry)
+        (login, hashed_master_password, kdf_salt, encrypted_master_key, verification_token, rsa_public_key, encrypted_rsa_private_key, is_verified, token_expiry)
       VALUES
-        (:email, :hashedPassword, :kdfSalt, :encMK, false, :verificationToken, DATE_ADD(NOW(), INTERVAL 30 MINUTE))
+        (:email, :hashedPassword, :kdfSalt, :encMK, :verificationToken, :rsaPublicKey, :encPrivateKey, false, DATE_ADD(NOW(), INTERVAL 30 MINUTE))
       `,
       {
         replacements: {
@@ -187,6 +191,10 @@ router.post("/register", Limiter, async (req, res) => {
           hashedPassword,
           kdfSalt: Buffer.from(kdfSalt, 'base64'),
           encMK: Buffer.from(encMK, 'base64'),
+
+          rsaPublicKey: Buffer.from(rsaPublicKey, "base64"),
+          encPrivateKey: Buffer.from(encPrivateKey, "base64"),
+
           verificationToken,
         },
         type: QueryTypes.INSERT,

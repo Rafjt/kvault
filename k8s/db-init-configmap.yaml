@@ -17,13 +17,10 @@ data:
         encrypted_master_key VARBINARY(255) NOT NULL,
 
         -- Clé publique utilisée pour les groupes stockée en claire
-        rsa_public_key TEXT NOT NULL,
+        rsa_public_key BLOB NOT NULL,
 
         -- Clé privé utilisée pour les groupes stockée chifrée via la Master key
-        encrypted_rsa_private_key VARBINARY(4096) NOT NULL,
-
-        -- Nonce de la clé (asymétrique) privé
-        rsa_private_key_nonce VARBINARY(12) NOT NULL,
+        encrypted_rsa_private_key BLOB NOT NULL,
 
         -- Statut de vérification
         is_verified BOOLEAN NOT NULL DEFAULT FALSE,
@@ -36,6 +33,51 @@ data:
 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB;
+
+    CREATE TABLE organizations (
+
+        id INT AUTO_INCREMENT PRIMARY KEY,
+
+        name VARCHAR(255) NOT NULL,
+
+        created_by INT NOT NULL,
+
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+        FOREIGN KEY(created_by)
+            REFERENCES users(id)
+            ON DELETE CASCADE
+    );
+
+    CREATE TABLE org_members (
+
+        organization_id INT NOT NULL,
+
+        user_id INT NOT NULL,
+
+        role ENUM(
+            'owner',
+            'admin',
+            'member'
+        ) DEFAULT 'member',
+
+        protected_osk VARBINARY(1024) NOT NULL,
+
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+        PRIMARY KEY(
+            organization_id,
+            user_id
+        ),
+
+        FOREIGN KEY(user_id)
+            REFERENCES users(id)
+            ON DELETE CASCADE,
+
+        FOREIGN KEY(organization_id)
+            REFERENCES organizations(id)
+            ON DELETE CASCADE
+    );
 
     CREATE TABLE secrets (
         id INT AUTO_INCREMENT PRIMARY KEY,
