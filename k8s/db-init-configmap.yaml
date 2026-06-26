@@ -16,6 +16,15 @@ data:
         -- Master key chiffrée avec la KEK
         encrypted_master_key VARBINARY(255) NOT NULL,
 
+        -- Clé publique utilisée pour les groupes stockée en claire
+        rsa_public_key TEXT NOT NULL,
+
+        -- Clé privé utilisée pour les groupes stockée chifrée via la Master key
+        encrypted_rsa_private_key VARBINARY(4096) NOT NULL,
+
+        -- Nonce de la clé (asymétrique) privé
+        rsa_private_key_nonce VARBINARY(12) NOT NULL,
+
         -- Statut de vérification
         is_verified BOOLEAN NOT NULL DEFAULT FALSE,
 
