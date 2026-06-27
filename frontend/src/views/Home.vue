@@ -1,30 +1,31 @@
 <script setup>
-// TODO: voir pk le déchiffrement marche pas 
-import { ref, onMounted, computed } from 'vue'
+// TODO: voir pk le déchiffrement marche pas
+import { ref, onMounted, computed } from "vue";
 import { API_BASE_URL } from "../components/constant.js";
 import { useCryptoStore } from "../stores/crypto.store";
-import { useRouter } from "vue-router"
-import { deleteSecret } from '../function/function'
+import { useRouter } from "vue-router";
+import { deleteSecret } from "../function/function";
 
-const router = useRouter()
+const router = useRouter();
 
 const cryptoStore = useCryptoStore();
 
-const secrets = ref([])
-const loading = ref(false)
-const errorMessage = ref('')
-const showValues = ref({}) // toggle pour chaque secret
-const searchQuery = ref('')
-const selectedType = ref('all')
-
+const secrets = ref([]);
+const loading = ref(false);
+const errorMessage = ref("");
+const showValues = ref({}); // toggle pour chaque secret
+const searchQuery = ref("");
+const selectedType = ref("all");
 
 // Déchiffre AES-GCM (ciphertext Base64) avec masterKey
 async function decryptSecret(ciphertextB64, nonceB64) {
-  const ciphertext = Uint8Array.from(atob(ciphertextB64), c => c.charCodeAt(0));
-  const iv = Uint8Array.from(atob(nonceB64), c => c.charCodeAt(0));
+  const ciphertext = Uint8Array.from(atob(ciphertextB64), (c) =>
+    c.charCodeAt(0),
+  );
+  const iv = Uint8Array.from(atob(nonceB64), (c) => c.charCodeAt(0));
 
   if (!cryptoStore.masterKey) {
-    throw new Error("MasterKey not loaded") ;
+    throw new Error("MasterKey not loaded");
   } else {
     console.log("Masterkey loaded");
   }
@@ -33,126 +34,120 @@ async function decryptSecret(ciphertextB64, nonceB64) {
     {
       name: "AES-GCM",
       iv,
-      tagLength: 128 // AES-GCM standard
+      tagLength: 128, // AES-GCM standard
     },
     cryptoStore.masterKey, // maintenant c’est un CryptoKey
-    ciphertext
+    ciphertext,
   );
-  
+
   return new TextDecoder().decode(decrypted);
 }
 
 async function createsec() {
-    router.push('/create')
+  router.push("/create");
 }
 
 async function handleDeleteSecret(secretId) {
   try {
-    await deleteSecret(secretId)
+    await deleteSecret(secretId);
 
-    secrets.value = secrets.value.filter(s => s.id !== secretId)
+    secrets.value = secrets.value.filter((s) => s.id !== secretId);
 
-    delete showValues.value[secretId]
-
+    delete showValues.value[secretId];
   } catch (err) {
-    console.error("Delete failed", err)
-    errorMessage.value = "Failed to delete secret"
+    console.error("Delete failed", err);
+    errorMessage.value = "Failed to delete secret";
   }
 }
 
 async function handleUpdateSecret(secretId) {
-  router.push(`/update/${secretId}`)
+  router.push(`/update/${secretId}`);
 }
 
-
 const fetchSecrets = async () => {
-  loading.value = true
-  errorMessage.value = ''
+  loading.value = true;
+  errorMessage.value = "";
 
   try {
     const res = await fetch(`${API_BASE_URL}/secrets`, {
-      method: 'GET',
-      credentials: 'include'
-    })
+      method: "GET",
+      credentials: "include",
+    });
 
-    const data = await res.json().catch(() => ({}))
+    const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      errorMessage.value = data.message || 'Failed to load secrets'
+      errorMessage.value = data.message || "Failed to load secrets";
     } else {
-      secrets.value = data.secrets || []
+      secrets.value = data.secrets || [];
 
       // Initialiser le toggle et déchiffrer les secrets
       for (const s of secrets.value) {
         //console.log("cipher length:", ciphertext.length)
-        showValues.value[s.id] = false
+        showValues.value[s.id] = false;
         try {
-          s.value = await decryptSecret(s.ciphertext, s.nonce)
+          s.value = await decryptSecret(s.ciphertext, s.nonce);
         } catch (e) {
-          
-          console.error('Decrypt error for secret', s.id, e)
-          s.value = 'ERROR'
+          console.error("Decrypt error for secret", s.id, e);
+          s.value = "ERROR";
         }
       }
     }
   } catch (err) {
-    errorMessage.value = 'Network error'
+    errorMessage.value = "Network error";
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 // Toggle show/hide
 const toggleValue = (id) => {
-  showValues.value[id] = !showValues.value[id]
-}
+  showValues.value[id] = !showValues.value[id];
+};
 
 const filteredSecrets = computed(() => {
   return secrets.value.filter((s) => {
     const matchType =
-      selectedType.value === 'all' || s.type === selectedType.value
+      selectedType.value === "all" || s.type === selectedType.value;
 
-    const matchSearch =
-      s.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+    const matchSearch = s.name
+      .toLowerCase()
+      .includes(searchQuery.value.toLowerCase());
 
-    return matchType && matchSearch
-  })
-})
+    return matchType && matchSearch;
+  });
+});
+
+const reloadPage = () => location.reload()
 
 onMounted(async () => {
   // Attendre que la masterKey soit prête
   if (!cryptoStore.masterKey) {
-    console.warn("MasterKey not loaded yet")
-    return
+    console.warn("MasterKey not loaded yet");
+    return;
   }
-  await fetchSecrets()
-})
-
+  await fetchSecrets();
+});
 </script>
 
 <template>
   <div class="secrets-page">
     <h2>Your Secrets</h2>
-    <button class="create-btn" @click="createsec">
-      + Create secret
-    </button>
+    <button class="create-btn" @click="createsec">+ Create secret</button>
     <div v-if="loading">Loading secrets...</div>
-    <div v-if="errorMessage" style="color:#b91c1c">
+    <div v-if="errorMessage" style="color: #b91c1c">
       {{ errorMessage }}
     </div>
-
+    
     <div v-if="!loading && filteredSecrets.length === 0">
       <p>No matching secrets found.</p>
     </div>
-
+    
     <div class="secrets-controls">
       <div class="search-box">
-        <input
-          v-model="searchQuery"
-          placeholder="Search by name..."
-        />
+        <input v-model="searchQuery" placeholder="Search by name..." />
       </div>
-
+      
       <div class="filter-box">
         <select v-model="selectedType">
           <option value="all">All types</option>
@@ -163,40 +158,45 @@ onMounted(async () => {
           <option value="note">Note</option>
         </select>
       </div>
+              <div class="refresh-page-box">
+          <button class="refresh-page-btn" @click="reloadPage()">
+            Logout
+          </button>
+        </div>
     </div>
-
+    
     <ul v-if="secrets.length > 0" class="secrets-list">
       <li
-        v-for="secret in filteredSecrets"
-        :key="secret.id"
-        class="secret-card"
+      v-for="secret in filteredSecrets"
+      :key="secret.id"
+      class="secret-card"
       >
-        <div class="secret-main">
-          <div class="secret-name">{{ secret.name }}</div>
-          <div class="secret-type">{{ secret.type }}</div>
+      <div class="secret-main">
+        <div class="secret-name">{{ secret.name }}</div>
+        <div class="secret-type">{{ secret.type }}</div>
+      </div>
+      
+      <div class="secret-meta">
+        <div>
+          Created: {{ new Date(secret.created_at).toLocaleDateString() }}
         </div>
-
-        <div class="secret-meta">
-          <div>Created: {{ new Date(secret.created_at).toLocaleDateString() }}</div>
-          <div>Updated: {{ new Date(secret.updated_at).toLocaleDateString() }}</div>
+        <div>
+          Updated: {{ new Date(secret.updated_at).toLocaleDateString() }}
         </div>
-
-        <div class="secret-value">
-          {{ showValues[secret.id] ? secret.value : '************' }}
-        </div>
-
-        <div class="secret-actions">
-          <button @click="toggleValue(secret.id)">
-            {{ showValues[secret.id] ? 'Hide' : 'Show' }}
-          </button>
-          <button @click="handleUpdateSecret(secret.id)">
-            Update
-          </button>
-          <button @click="handleDeleteSecret(secret.id)">
-            delete
-          </button>
-        </div>
-      </li>
-    </ul>
+      </div>
+      
+      <div class="secret-value">
+        {{ showValues[secret.id] ? secret.value : "************" }}
+      </div>
+      
+      <div class="secret-actions">
+        <button @click="toggleValue(secret.id)">
+          {{ showValues[secret.id] ? "Hide" : "Show" }}
+        </button>
+        <button @click="handleUpdateSecret(secret.id)">Update</button>
+        <button @click="handleDeleteSecret(secret.id)">delete</button>
+      </div>
+    </li>
+  </ul>
   </div>
 </template>
