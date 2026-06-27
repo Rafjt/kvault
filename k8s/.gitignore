@@ -1,2 +1,7 @@
 kvault.*
 secret*
+*.crt
+*.pem
+*.key
+*.srl
+*.cnf
