@@ -259,6 +259,71 @@ router.delete("/delete/:id", authMiddleware, async (req, res) => {
   }
 });
 
+/* ========================= ORGANIZATIONS ========================= */
 
+router.post("/org/create", authMiddleware, async (req, res) => {
+  const { name } = req.body;
+  const userId = req.user?.id; // Récupéré via authMiddleware
+
+  // 1️⃣ Validation des données d'entrée
+  if (!name || typeof name !== "string" || name.trim() === "") {
+    return res.status(400).json({ error: "Organization name is required." });
+  }
+
+  if (name.length > 255) {
+    return res.status(400).json({ error: "Organization name cannot exceed 255 characters." });
+  }
+
+  try {
+    // 2️⃣ Optionnel : Vérifier si une organisation avec le même nom existe déjà
+    const existing = await sequelize.query(
+      "SELECT id FROM organizations WHERE name = :name",
+      {
+        replacements: { name: name.trim() },
+        type: QueryTypes.SELECT,
+      }
+    );
+
+    if (existing.length > 0) {
+      return res.status(409).json({ error: "An organization with this name already exists." });
+    }
+
+    // 3️⃣ Insertion dans la base de données
+    // Note : 'created_at' est géré automatiquement par le DEFAULT CURRENT_TIMESTAMP de ta table
+    await sequelize.query(
+      `
+      INSERT INTO organizations (name, created_by)
+      VALUES (:name, :createdBy)
+      `,
+      {
+        replacements: {
+          name: name.trim(),
+          createdBy: userId,
+        },
+        type: QueryTypes.INSERT,
+      }
+    );
+
+    // 4️⃣ Réponse de succès
+    return res.status(201).json({
+      message: "Organization created successfully.",
+      organization: {
+        name: name.trim(),
+        created_by: userId
+      }
+    });
+
+  } catch (error) {
+    // Log conforme à ton style de gestion d'erreur
+    if (req.log) {
+      req.log.error({ err: error }, "Organization creation error");
+    } else {
+      console.error("ORGANIZATION CREATION ERROR:", error);
+    }
+    
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+ 
 
 module.exports = router;

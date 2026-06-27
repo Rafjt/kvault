@@ -136,9 +136,16 @@ onMounted(async () => {
 
 <template>
   <div class="secrets-page">
-    <!-- ===================== -->
-    <!-- ACCOUNT SECTION -->
-    <!-- ===================== -->
+    <h2>Organisation Secrets</h2>
+    
+    <h2>Your Secrets</h2>
+    <button class="create-btn" @click="createsec">
+      + Create secret
+    </button>
+    <div v-if="loading">Loading secrets...</div>
+    <div v-if="errorMessage" style="color:#b91c1c">
+      {{ errorMessage }}
+    </div>
     <section class="page-section">
       <h2>Your account</h2>
 
