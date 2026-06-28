@@ -160,3 +160,32 @@ export async function decryptSecret(ciphertextB64, nonceB64, masterKey) {
   
   return new TextDecoder().decode(decrypted);
 }
+
+// ==============================
+//  ORGANIZATIONS AND ORG_SECRETS
+// ==============================
+
+export async function encryptOsk(oskRaw, masterKey) {
+  if (!masterKey) {
+    throw new Error("MasterKey not loaded");
+  }
+
+  const iv = crypto.getRandomValues(new Uint8Array(12)); // 12 octets
+
+  const ciphertextBuffer = await crypto.subtle.encrypt(
+    {
+      name: "AES-GCM",
+      iv
+    },
+    masterKey,
+    oskRaw
+  );
+
+  const ciphertextArray = new Uint8Array(ciphertextBuffer);
+
+  const combinedBuffer = new Uint8Array(iv.length + ciphertextArray.length);
+  combinedBuffer.set(iv, 0);
+  combinedBuffer.set(ciphertextArray, iv.length);
+
+  return btoa(String.fromCharCode(...combinedBuffer));
+}

@@ -264,9 +264,11 @@ router.delete("/delete/:id", authMiddleware, async (req, res) => {
 /* ========================= ORGANIZATIONS ========================= */
 
 router.post("/org/create", authMiddleware, async (req, res) => {
-  const { name } = req.body;
+  // 1. Récupération de encOsk envoyé par le front-end
+  const { name, encOsk } = req.body;
   const userId = req.user.id;
 
+  // Validations de base
   if (!name || typeof name !== "string" || name.trim() === "") {
     return res.status(400).json({
       error: "Organization name is required."
@@ -279,10 +281,16 @@ router.post("/org/create", authMiddleware, async (req, res) => {
     });
   }
 
+  // Validation de la présence de la clé crypto
+  if (!encOsk || typeof encOsk !== "string") {
+    return res.status(400).json({
+      error: "Encrypted OSK data is required."
+    });
+  }
+
   const transaction = await sequelize.transaction();
 
   try {
-
     // Vérifie qu'une organisation du même nom n'existe pas
     const existing = await sequelize.query(
       `
@@ -291,9 +299,7 @@ router.post("/org/create", authMiddleware, async (req, res) => {
       WHERE name = :name
       `,
       {
-        replacements: {
-          name: name.trim()
-        },
+        replacements: { name: name.trim() },
         type: QueryTypes.SELECT,
         transaction
       }
@@ -301,7 +307,6 @@ router.post("/org/create", authMiddleware, async (req, res) => {
 
     if (existing.length > 0) {
       await transaction.rollback();
-
       return res.status(409).json({
         error: "An organization with this name already exists."
       });
@@ -325,26 +330,30 @@ router.post("/org/create", authMiddleware, async (req, res) => {
 
     const organizationId = result;
 
-    // Le créateur devient automatiquement membre
+    // Le créateur devient membre 'owner' et on enregistre son OSK chiffrée
+    // Utilisation de FROM_BASE64 pour convertir la string reçue en VARBINARY
     await sequelize.query(
       `
       INSERT INTO org_members
       (
         organization_id,
         user_id,
-        role
+        role,
+        protected_osk
       )
       VALUES
       (
         :organizationId,
         :userId,
-        'owner'
+        'owner',
+        FROM_BASE64(:encOsk)
       )
       `,
       {
         replacements: {
           organizationId,
-          userId
+          userId,
+          encOsk // La string Base64 concaténée (Nonce + Ciphertext)
         },
         type: QueryTypes.INSERT,
         transaction
@@ -362,15 +371,11 @@ router.post("/org/create", authMiddleware, async (req, res) => {
     });
 
   } catch (err) {
-
     await transaction.rollback();
-
     console.error(err);
-
     return res.status(500).json({
       error: "Internal server error"
     });
-
   }
 });
 

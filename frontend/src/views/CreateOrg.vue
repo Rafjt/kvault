@@ -2,6 +2,10 @@
 import { ref } from "vue"
 import { useRouter } from "vue-router"
 import { API_BASE_URL } from "../components/constant"
+import { encryptOsk } from "../function/crypto"
+import { useCryptoStore } from "../stores/crypto.store"
+
+const cryptoStore = useCryptoStore()
 
 const router = useRouter()
 
@@ -31,6 +35,8 @@ async function submitOrganization() {
 
     const osk = crypto.getRandomValues(new Uint8Array(32))
 
+    const encryptedOskBlob = await encryptOsk(osk, cryptoStore.masterKey)
+
     const res = await fetch(`${API_BASE_URL}/org/create`, {
       method: "POST",
       credentials: "include",
@@ -38,7 +44,8 @@ async function submitOrganization() {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        name: form.value.name
+        name: form.value.name,
+        encOsk: encryptedOskBlob
       })
     })
 
