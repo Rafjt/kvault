@@ -18,6 +18,8 @@ router.get("/check", authMiddleware, (req, res) => {
   return res.status(200).json({ status: "OK" });
 });
 
+/* ========================= SECRETS ========================= */
+
 router.get("/secrets", authMiddleware, async (req, res) => {
   const userId = req.user.id;
 
@@ -263,34 +265,50 @@ router.delete("/delete/:id", authMiddleware, async (req, res) => {
 
 router.post("/org/create", authMiddleware, async (req, res) => {
   const { name } = req.body;
-  const userId = req.user?.id; // Récupéré via authMiddleware
+  const userId = req.user.id;
 
-  // 1️⃣ Validation des données d'entrée
   if (!name || typeof name !== "string" || name.trim() === "") {
-    return res.status(400).json({ error: "Organization name is required." });
+    return res.status(400).json({
+      error: "Organization name is required."
+    });
   }
 
   if (name.length > 255) {
-    return res.status(400).json({ error: "Organization name cannot exceed 255 characters." });
+    return res.status(400).json({
+      error: "Organization name cannot exceed 255 characters."
+    });
   }
 
+  const transaction = await sequelize.transaction();
+
   try {
-    // 2️⃣ Optionnel : Vérifier si une organisation avec le même nom existe déjà
+
+    // Vérifie qu'une organisation du même nom n'existe pas
     const existing = await sequelize.query(
-      "SELECT id FROM organizations WHERE name = :name",
+      `
+      SELECT id
+      FROM organizations
+      WHERE name = :name
+      `,
       {
-        replacements: { name: name.trim() },
+        replacements: {
+          name: name.trim()
+        },
         type: QueryTypes.SELECT,
+        transaction
       }
     );
 
     if (existing.length > 0) {
-      return res.status(409).json({ error: "An organization with this name already exists." });
+      await transaction.rollback();
+
+      return res.status(409).json({
+        error: "An organization with this name already exists."
+      });
     }
 
-    // 3️⃣ Insertion dans la base de données
-    // Note : 'created_at' est géré automatiquement par le DEFAULT CURRENT_TIMESTAMP de ta table
-    await sequelize.query(
+    // Création de l'organisation
+    const [result] = await sequelize.query(
       `
       INSERT INTO organizations (name, created_by)
       VALUES (:name, :createdBy)
@@ -298,32 +316,187 @@ router.post("/org/create", authMiddleware, async (req, res) => {
       {
         replacements: {
           name: name.trim(),
-          createdBy: userId,
+          createdBy: userId
         },
         type: QueryTypes.INSERT,
+        transaction
       }
     );
 
-    // 4️⃣ Réponse de succès
+    const organizationId = result;
+
+    // Le créateur devient automatiquement membre
+    await sequelize.query(
+      `
+      INSERT INTO org_members
+      (
+        organization_id,
+        user_id,
+        role
+      )
+      VALUES
+      (
+        :organizationId,
+        :userId,
+        'owner'
+      )
+      `,
+      {
+        replacements: {
+          organizationId,
+          userId
+        },
+        type: QueryTypes.INSERT,
+        transaction
+      }
+    );
+
+    await transaction.commit();
+
     return res.status(201).json({
       message: "Organization created successfully.",
       organization: {
-        name: name.trim(),
-        created_by: userId
+        id: organizationId,
+        name: name.trim()
       }
     });
 
-  } catch (error) {
-    // Log conforme à ton style de gestion d'erreur
-    if (req.log) {
-      req.log.error({ err: error }, "Organization creation error");
-    } else {
-      console.error("ORGANIZATION CREATION ERROR:", error);
-    }
-    
-    return res.status(500).json({ error: "Internal server error" });
+  } catch (err) {
+
+    await transaction.rollback();
+
+    console.error(err);
+
+    return res.status(500).json({
+      error: "Internal server error"
+    });
+
   }
 });
- 
+
+router.get("/org", authMiddleware, async (req, res) => {
+
+  const userId = req.user.id
+
+  try {
+
+    const organizations = await sequelize.query(
+      `
+      SELECT
+        o.id,
+        o.name,
+        o.created_at,
+        COUNT(os.id) AS secret_count
+      FROM organizations o
+
+      INNER JOIN org_members om
+        ON om.organization_id = o.id
+
+      LEFT JOIN organization_secrets os
+        ON os.organization_id = o.id
+
+      WHERE om.user_id = :userId
+
+      GROUP BY
+        o.id,
+        o.name,
+        o.created_at
+
+      ORDER BY o.name
+      `,
+      {
+        replacements: { userId },
+        type: QueryTypes.SELECT
+      }
+    )
+
+    console.log(organizations)
+    res.json({
+      organizations
+    })
+
+  } catch (err) {
+
+    console.error(err)
+
+    res.status(500).json({
+      message: "Internal server error"
+    })
+
+  }
+
+})
+
+router.get("/org/secrets", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const { type, name } = req.query;
+
+  try {
+    // Construction de la clause WHERE dynamique pour les filtres optionnels
+    let filterClause = "";
+    const replacements = { userId };
+
+    if (type) {
+      filterClause += " AND os.type = :type";
+      replacements.type = type;
+    }
+
+    if (name) {
+      filterClause += " AND os.name LIKE :name";
+      replacements.name = `%${name}%`;
+    }
+
+    // Requête SQL : On sélectionne les secrets des organisations où l'utilisateur est membre
+    const secrets = await sequelize.query(
+      `
+      SELECT 
+        os.id, 
+        os.organization_id,
+        o.name AS organization_name,
+        os.type, 
+        os.name, 
+        os.encrypted_cipher_key, 
+        os.ciphertext, 
+        os.nonce, 
+        os.created_at, 
+        os.updated_at
+      FROM organization_secrets os
+      INNER JOIN organizations o ON os.organization_id = o.id
+      INNER JOIN org_members om ON o.id = om.organization_id
+      WHERE om.user_id = :userId
+      ${filterClause}
+      ORDER BY os.created_at DESC
+      `,
+      {
+        replacements,
+        type: QueryTypes.SELECT
+      }
+    );
+
+    // Formatage des données binaires (VARBINARY -> Base64)
+    const formattedSecrets = secrets.map(secret => ({
+      id: secret.id,
+      organization_id: secret.organization_id,
+      organization_name: secret.organization_name, // Pratique pour l'UI côté front
+      type: secret.type,
+      name: secret.name,
+      encrypted_cipher_key: Buffer.from(secret.encrypted_cipher_key).toString("base64"),
+      ciphertext: Buffer.from(secret.ciphertext).toString("base64"),
+      nonce: Buffer.from(secret.nonce).toString("base64"),
+      created_at: secret.created_at,
+      updated_at: secret.updated_at
+    }));
+
+    return res.status(200).json({
+      secrets: formattedSecrets
+    });
+
+  } catch (error) {
+    req.log?.error({ err: error, userId }, "List all accessible organization secrets error");
+    return res.status(500).json({
+      message: "Internal server error"
+    });
+  }
+});
 
 module.exports = router;

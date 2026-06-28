@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { API_AUTH_URL } from "../components/constant.js";
-import { argon2id } from 'hash-wasm'
+import { importKEK, deriveKEK, encryptMasterKey, generateRSAKeyPair, exportRsaKeyPair, encryptPrivateKey } from '../function/crypto.js';
 
 const router = useRouter()
 
@@ -58,24 +58,13 @@ const onSubmit = async (e) => {
     const privateKeyIv = crypto.getRandomValues(new Uint8Array(12))
 
     // 2. Dérivation de la KEK
-    const kekRaw = await argon2id({
-      password: password.value,
-      salt: kdfSalt,
-      parallelism: 1,
-      iterations: 3,
-      memorySize: 65536,
-      hashLength: 32,
-      outputType: 'binary'
-    })
 
-    const kek = await crypto.subtle.importKey(
-      "raw", kekRaw, { name: "AES-GCM" }, false, ["encrypt"]
-    )
+    const kekRaw = await deriveKEK(password.value,kdfSalt)
+
+    const kek = await importKEK(kekRaw,"encrypt")
 
     // 3. Chiffrement de la Master Key
-    const encryptedMK = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv }, kek, masterKey
-    )
+    const encryptedMK = await encryptMasterKey( iv, kek, masterKey)
 
     // 4. Assemblage : IV + CIPHERTEXT
     const encryptedMasterKey = new Uint8Array(iv.length + encryptedMK.byteLength)
@@ -83,37 +72,13 @@ const onSubmit = async (e) => {
     encryptedMasterKey.set(new Uint8Array(encryptedMK), iv.length)
 
     // 5. Génération de la bi-clé RSA
-    const rsaKeyPair = await crypto.subtle.generateKey(
-      {
-        name: "RSA-OAEP",
-        modulusLength: 4096,
-        publicExponent: new Uint8Array([1, 0, 1]),
-        hash: "SHA-256"
-      },
-      true,
-      ["encrypt", "decrypt"]
-    )
+    const rsaKeyPair = await generateRSAKeyPair()
 
     // 6. Exports des clées
-    const publicKeySpki = await crypto.subtle.exportKey(
-      "spki",
-      rsaKeyPair.publicKey
-    )
-
-    const privateKeyPkcs8 = await crypto.subtle.exportKey(
-      "pkcs8",
-      rsaKeyPair.privateKey
-    )
+    const { publicKeySpki, privateKeyPkcs8 } = await exportRsaKeyPair(rsaKeyPair)
 
     // 7. Chiffrement de la clé privée 
-    const encryptedPrivateKey = await crypto.subtle.encrypt(
-      {
-        name: "AES-GCM",
-        iv: privateKeyIv
-      },
-      kek,
-      privateKeyPkcs8
-    )
+    const encryptedPrivateKey = await encryptPrivateKey(privateKeyIv, kek, privateKeyPkcs8)
 
     // 8. Concaténation IV + Ciphertext (partie privé)
     const encryptedPrivateKeyBlob = new Uint8Array(

@@ -229,9 +229,17 @@ router.post("/login", Limiter, async (req, res) => {
   try {
     // 1️⃣ Fetch user
     const users = await sequelize.query(
-      `
-      SELECT id, login, hashed_master_password, is_verified,
-             encrypted_master_key, kdf_salt, token_expiry
+  `
+      SELECT
+          id,
+          login,
+          hashed_master_password,
+          is_verified,
+          encrypted_master_key,
+          kdf_salt,
+          rsa_public_key,
+          encrypted_rsa_private_key,
+          token_expiry
       FROM users
       WHERE login = ?
       `,
@@ -325,10 +333,18 @@ router.post("/login", Limiter, async (req, res) => {
     return res.json({
       message: "Login successful",
       crypto: {
+        
         encrypted_master_key: Buffer.from(user.encrypted_master_key).toString(
           "base64"
         ),
+
         kdf_salt: Buffer.from(user.kdf_salt).toString("base64"),
+
+        rsa_public_key: Buffer.from(user.rsa_public_key).toString("base64"),
+
+        encrypted_rsa_private_key: Buffer.from(user.encrypted_rsa_private_key).toString("base64")
+
+
       },
     });
   } catch (error) {

@@ -1,8 +1,9 @@
 <script setup>
 import { ref } from "vue"
-import { useCryptoStore, encryptSecret } from "../stores/crypto.store"
+import { useCryptoStore } from "../stores/crypto.store"
 import { API_BASE_URL } from "../components/constant"
 import { useRouter } from "vue-router"
+import { encryptSecret } from "../function/crypto"
 
 const cryptoStore = useCryptoStore()
 const router = useRouter()

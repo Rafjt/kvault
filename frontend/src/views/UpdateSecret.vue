@@ -1,9 +1,10 @@
 <script setup>
 import { ref, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { useCryptoStore, encryptSecret } from "../stores/crypto.store"
+import { useCryptoStore } from "../stores/crypto.store"
 import { API_BASE_URL } from "../components/constant"
 import { fetchSecret } from "../function/function"
+import { encryptSecret } from "../function/crypto"
 
 const route = useRoute()
 const router = useRouter()

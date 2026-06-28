@@ -1,46 +1,26 @@
 <script setup>
-// TODO: voir pk le déchiffrement marche pas
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed } from 'vue'
 import { API_BASE_URL } from "../components/constant.js";
 import { useCryptoStore } from "../stores/crypto.store";
-import { useRouter } from "vue-router";
-import { deleteSecret } from "../function/function";
+import { useRouter } from "vue-router"
+import { deleteSecret } from '../function/function'
+import { decryptSecret } from '../function/crypto.js';
 
 const router = useRouter();
 
 const cryptoStore = useCryptoStore();
 
-const secrets = ref([]);
-const loading = ref(false);
-const errorMessage = ref("");
-const showValues = ref({}); // toggle pour chaque secret
-const searchQuery = ref("");
-const selectedType = ref("all");
+const secrets = ref([])
+const loading = ref(false)
+const errorMessage = ref('')
+const showValues = ref({}) // toggle pour chaque secret
+const searchQuery = ref('')
+const selectedType = ref('all')
+const organizations = ref([])
+const showOrgValues = ref({})
 
-// Déchiffre AES-GCM (ciphertext Base64) avec masterKey
-async function decryptSecret(ciphertextB64, nonceB64) {
-  const ciphertext = Uint8Array.from(atob(ciphertextB64), (c) =>
-    c.charCodeAt(0),
-  );
-  const iv = Uint8Array.from(atob(nonceB64), (c) => c.charCodeAt(0));
-
-  if (!cryptoStore.masterKey) {
-    throw new Error("MasterKey not loaded");
-  } else {
-    console.log("Masterkey loaded");
-  }
-
-  const decrypted = await crypto.subtle.decrypt(
-    {
-      name: "AES-GCM",
-      iv,
-      tagLength: 128, // AES-GCM standard
-    },
-    cryptoStore.masterKey, // maintenant c’est un CryptoKey
-    ciphertext,
-  );
-
-  return new TextDecoder().decode(decrypted);
+async function createOrg() {
+  router.push("/createOrg")
 }
 
 async function createsec() {
@@ -68,6 +48,27 @@ async function handleUpdateSecret(secretId) {
   router.push(`/update/${secretId}`);
 }
 
+const fetchOrganizations = async () => {
+
+  try {
+
+    const res = await fetch(`${API_BASE_URL}/org`, {
+      credentials: "include"
+    })
+
+    const data = await res.json()
+
+    if (res.ok) {
+      organizations.value = data.organizations
+      console.log(organizations)
+    }
+
+  } catch (err) {
+    console.error(err)
+  }
+
+}
+
 const fetchSecrets = async () => {
   loading.value = true;
   errorMessage.value = "";
@@ -78,7 +79,9 @@ const fetchSecrets = async () => {
       credentials: "include",
     });
 
-    const data = await res.json().catch(() => ({}));
+    console.log("New decrypt secret")
+
+    const data = await res.json().catch(() => ({}))
 
     if (!res.ok) {
       errorMessage.value = data.message || "Failed to load secrets";
@@ -90,7 +93,7 @@ const fetchSecrets = async () => {
         //console.log("cipher length:", ciphertext.length)
         showValues.value[s.id] = false;
         try {
-          s.value = await decryptSecret(s.ciphertext, s.nonce);
+          s.value = await decryptSecret(s.ciphertext, s.nonce, cryptoStore.masterKey)
         } catch (e) {
           console.error("Decrypt error for secret", s.id, e);
           s.value = "ERROR";
@@ -125,19 +128,75 @@ const filteredSecrets = computed(() => {
 const reloadPage = () => location.reload();
 
 onMounted(async () => {
-  // Attendre que la masterKey soit prête
   if (!cryptoStore.masterKey) {
     console.warn("MasterKey not loaded yet");
     return;
   }
-  await fetchSecrets();
-});
+
+  await Promise.all([
+    fetchSecrets(),
+    fetchOrganizations()
+  ])
+})
+
+const toggleOrgValue = (id) => {
+  showOrgValues.value[id] = !showOrgValues.value[id]
+}
+
 </script>
 
 <template>
   <div class="secrets-page">
-    <h2>Organisation Secrets</h2>
-    
+    <h2>Your Organizations</h2>
+
+    <div v-if="organizations.length === 0">
+
+      <p>You are not a member of any organization.</p>
+
+      <button @click="createOrg">
+        + Create an organization 
+      </button>
+
+    </div>
+
+    <div v-else>
+
+      <div
+        v-for="org in organizations"
+        :key="org.id"
+        class="secret-card"
+      >
+
+        <div class="secret-main">
+
+          <div class="secret-name">
+            {{ org.name }}
+          </div>
+
+          <div class="secret-type">
+            {{ org.secret_count }} secret(s)
+          </div>
+
+        </div>
+
+        <div
+          v-if="org.secret_count === 0"
+          style="margin-top:1rem"
+        >
+
+          <p>No secret yet.</p>
+
+          <button
+            @click="router.push(`/createOrgSecret/${org.id}`)"
+          >
+            + Create first secret
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
     <h2>Your Secrets</h2>
     <button class="create-btn" @click="createsec">
       + Create secret
