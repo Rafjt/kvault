@@ -309,9 +309,20 @@ button:hover {
 
 /* === BARRE FILTRES === */
 .secrets-controls {
-  display: flex;
-  gap: 1rem;
-  margin: 1rem 0 2rem 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+  align-items: stretch;
+  margin-top: 30px;
+}
+
+.page-section {
+  margin-bottom: 32px;
+}
+
+.page-section h2 {
+  margin-bottom: 12px;
 }
 
 /* 50 / 50 */
@@ -346,4 +357,31 @@ button:hover {
 .search-box input:focus,
 .filter-box select:focus {
   border-color: var(--primary-color);
+}
+
+.input-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+}
+
+.input-wrapper input[type="password"],
+.input-wrapper input[type="text"] {
+  width: 100%;
+  padding-right: 40px;
+  box-sizing: border-box;
+}
+
+.toggle {
+  position: absolute;
+  right: 5%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0;
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  position: absolute;
 }
