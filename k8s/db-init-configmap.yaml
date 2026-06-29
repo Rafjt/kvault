@@ -82,6 +82,7 @@ data:
     );
 
     CREATE TABLE organization_secrets (
+
         id INT AUTO_INCREMENT PRIMARY KEY,
 
         organization_id INT NOT NULL,
@@ -90,19 +91,16 @@ data:
 
         name VARCHAR(200) NOT NULL,
 
-        encrypted_cipher_key VARBINARY(512) NOT NULL,
+        encrypted_cipher_key VARBINARY(1024) NOT NULL,
 
-        ciphertext VARBINARY(4096) NOT NULL,
-
-        nonce VARBINARY(32) NOT NULL,
+        ciphertext VARBINARY(8192) NOT NULL,
 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             ON UPDATE CURRENT_TIMESTAMP,
 
-        CONSTRAINT fk_org_secret_org
-            FOREIGN KEY (organization_id)
+        FOREIGN KEY (organization_id)
             REFERENCES organizations(id)
             ON DELETE CASCADE
     );
@@ -115,7 +113,6 @@ data:
         name VARCHAR(200) NOT NULL,
 
         ciphertext VARBINARY(4096) NOT NULL,
-        nonce VARBINARY(32) NOT NULL,
 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
