@@ -4,6 +4,7 @@ import Register from '../views/Register.vue'
 import Home from '../views/Home.vue'
 import Create from '../views/CreateSecret.vue'
 import Update from '../views/UpdateSecret.vue'
+import ChangePassword from "../views/ChangePassword.vue";
 
 
 const routes = [
@@ -13,6 +14,7 @@ const routes = [
   { path: '/home', name: 'home', component: Home, meta: { requiresAuth: true } },
   { path: '/create', name: 'create', component: Create, meta: { requiresAuth: true } },
   { path: "/update/:id", name: "UpdateSecret", component: Update, meta: { requiresAuth: true } },
+  { path: "/change-password", name: "ChangePassword", component: ChangePassword, meta: { requiresAuth: true } },
 // Captulle toutes les routes non trouvées et redirige
   { path: '/:catchAll(.*)', redirect: '/login' }
 ]

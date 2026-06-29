@@ -47,6 +47,10 @@ async function createsec() {
   router.push("/create");
 }
 
+async function redirectToChangePassword() {
+  router.push("/change-password");
+}
+
 async function handleDeleteSecret(secretId) {
   try {
     await deleteSecret(secretId);
@@ -118,7 +122,7 @@ const filteredSecrets = computed(() => {
   });
 });
 
-const reloadPage = () => location.reload()
+const reloadPage = () => location.reload();
 
 onMounted(async () => {
   // Attendre que la masterKey soit prête
@@ -132,71 +136,95 @@ onMounted(async () => {
 
 <template>
   <div class="secrets-page">
-    <h2>Your Secrets</h2>
-    <button class="create-btn" @click="createsec">+ Create secret</button>
-    <div v-if="loading">Loading secrets...</div>
-    <div v-if="errorMessage" style="color: #b91c1c">
-      {{ errorMessage }}
-    </div>
-    
-    <div v-if="!loading && filteredSecrets.length === 0">
-      <p>No matching secrets found.</p>
-    </div>
-    
-    <div class="secrets-controls">
-      <div class="search-box">
-        <input v-model="searchQuery" placeholder="Search by name..." />
-      </div>
-      
-      <div class="filter-box">
-        <select v-model="selectedType">
-          <option value="all">All types</option>
-          <option value="text">Text</option>
-          <option value="password">Password</option>
-          <option value="token">Token</option>
-          <option value="identifier">Identifier</option>
-          <option value="note">Note</option>
-        </select>
-      </div>
-              <div class="refresh-page-box">
-          <button class="refresh-page-btn" @click="reloadPage()">
-            Logout
-          </button>
-        </div>
-    </div>
-    
-    <ul v-if="secrets.length > 0" class="secrets-list">
-      <li
-      v-for="secret in filteredSecrets"
-      :key="secret.id"
-      class="secret-card"
-      >
-      <div class="secret-main">
-        <div class="secret-name">{{ secret.name }}</div>
-        <div class="secret-type">{{ secret.type }}</div>
-      </div>
-      
-      <div class="secret-meta">
-        <div>
-          Created: {{ new Date(secret.created_at).toLocaleDateString() }}
-        </div>
-        <div>
-          Updated: {{ new Date(secret.updated_at).toLocaleDateString() }}
-        </div>
-      </div>
-      
-      <div class="secret-value">
-        {{ showValues[secret.id] ? secret.value : "************" }}
-      </div>
-      
-      <div class="secret-actions">
-        <button @click="toggleValue(secret.id)">
-          {{ showValues[secret.id] ? "Hide" : "Show" }}
+    <!-- ===================== -->
+    <!-- ACCOUNT SECTION -->
+    <!-- ===================== -->
+    <section class="page-section">
+      <h2>Your account</h2>
+
+      <div class="secrets-controls">
+        <button class="action-btn logout-btn" @click="reloadPage">
+          Logout
         </button>
-        <button @click="handleUpdateSecret(secret.id)">Update</button>
-        <button @click="handleDeleteSecret(secret.id)">delete</button>
+
+        <button
+          class="action-btn reset-btn"
+          @click="redirectToChangePassword()"
+        >
+          Change password
+        </button>
       </div>
-    </li>
-  </ul>
+    </section>
+
+    <!-- ===================== -->
+    <!-- SECRETS SECTION -->
+    <!-- ===================== -->
+    <section class="page-section">
+      <h2>Your secrets</h2>
+
+      <button class="create-btn" @click="createsec">+ Create secret</button>
+
+      <div v-if="loading">Loading secrets...</div>
+
+      <div v-if="errorMessage" style="color: #b91c1c">
+        {{ errorMessage }}
+      </div>
+
+      <div v-if="!loading && filteredSecrets.length === 0">
+        <p>No matching secrets found.</p>
+      </div>
+
+      <!-- KEEP YOUR EXISTING CONTROLS -->
+      <div class="secrets-controls">
+        <div class="search-box">
+          <input v-model="searchQuery" placeholder="Search by name..." />
+        </div>
+
+        <div class="filter-box">
+          <select v-model="selectedType">
+            <option value="all">All types</option>
+            <option value="text">Text</option>
+            <option value="password">Password</option>
+            <option value="token">Token</option>
+            <option value="identifier">Identifier</option>
+            <option value="note">Note</option>
+          </select>
+        </div>
+      </div>
+
+      <ul v-if="secrets.length > 0" class="secrets-list">
+        <li
+          v-for="secret in filteredSecrets"
+          :key="secret.id"
+          class="secret-card"
+        >
+          <div class="secret-main">
+            <div class="secret-name">{{ secret.name }}</div>
+            <div class="secret-type">{{ secret.type }}</div>
+          </div>
+
+          <div class="secret-meta">
+            <div>
+              Created: {{ new Date(secret.created_at).toLocaleDateString() }}
+            </div>
+            <div>
+              Updated: {{ new Date(secret.updated_at).toLocaleDateString() }}
+            </div>
+          </div>
+
+          <div class="secret-value">
+            {{ showValues[secret.id] ? secret.value : "************" }}
+          </div>
+
+          <div class="secret-actions">
+            <button @click="toggleValue(secret.id)">
+              {{ showValues[secret.id] ? "Hide" : "Show" }}
+            </button>
+            <button @click="handleUpdateSecret(secret.id)">Update</button>
+            <button @click="handleDeleteSecret(secret.id)">delete</button>
+          </div>
+        </li>
+      </ul>
+    </section>
   </div>
 </template>
