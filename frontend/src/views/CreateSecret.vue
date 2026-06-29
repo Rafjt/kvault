@@ -36,10 +36,12 @@ async function submitSecret() {
 
   try {
     // 🔐 chiffrement uniquement de la valeur
-    const { ciphertext, nonce } = await encryptSecret(
+    const ciphertext = await encryptSecret(
       form.value.value,
       cryptoStore.masterKey
     )
+
+    console.log(ciphertext)
 
     const res = await fetch(`${API_BASE_URL}/create`, {
       method: "POST",
@@ -48,8 +50,7 @@ async function submitSecret() {
       body: JSON.stringify({
         name: form.value.name,
         type: form.value.type,
-        ciphertext,
-        nonce
+        ciphertext
       })
     })
 

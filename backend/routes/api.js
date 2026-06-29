@@ -42,7 +42,7 @@ router.get("/secrets", authMiddleware, async (req, res) => {
   try {
     const secrets = await sequelize.query(
       `
-      SELECT id, type, name, ciphertext, nonce, created_at, updated_at
+      SELECT id, type, name, ciphertext, created_at, updated_at
       FROM secrets
       ${whereClause}
       ORDER BY created_at DESC
@@ -58,7 +58,6 @@ router.get("/secrets", authMiddleware, async (req, res) => {
       type: secret.type,
       name: secret.name,
       ciphertext: Buffer.from(secret.ciphertext).toString("base64"),
-      nonce: Buffer.from(secret.nonce).toString("base64"),
       created_at: secret.created_at,
       updated_at: secret.updated_at
     }));
@@ -82,7 +81,7 @@ router.get("/secrets/:id", authMiddleware, async (req, res) => {
   try {
     const secrets = await sequelize.query(
       `
-      SELECT id, type, name, ciphertext, nonce, created_at, updated_at
+      SELECT id, type, name, ciphertext, created_at, updated_at
       FROM secrets
       WHERE owner_id = ? AND id = ?
       LIMIT 1
@@ -106,7 +105,6 @@ router.get("/secrets/:id", authMiddleware, async (req, res) => {
       type: secret.type,
       name: secret.name,
       ciphertext: Buffer.from(secret.ciphertext).toString("base64"),
-      nonce: Buffer.from(secret.nonce).toString("base64"),
       created_at: secret.created_at,
       updated_at: secret.updated_at
     };
@@ -125,14 +123,14 @@ router.get("/secrets/:id", authMiddleware, async (req, res) => {
  */
 router.post("/create", authMiddleware, async (req, res) => {
   const userId = req.user.id;
-  const { name, type, ciphertext, nonce } = req.body;
+  const { name, type, ciphertext } = req.body;
 
   // =========================
   // Validation minimale
   // =========================
-  if (!name || !type || !ciphertext || !nonce) {
+  if (!name || !type || !ciphertext) {
     return res.status(400).json({
-      message: "name, type, ciphertext and nonce are required"
+      message: "name, type and ciphertext are required"
     });
   }
 
@@ -143,9 +141,9 @@ router.post("/create", authMiddleware, async (req, res) => {
     await sequelize.query(
       `
       INSERT INTO secrets
-        (owner_id, name, type, ciphertext, nonce)
+        (owner_id, name, type, ciphertext)
       VALUES
-        (?, ?, ?, ?, ?)
+        (?, ?, ?, ?)
       `,
       {
         replacements: [
@@ -153,7 +151,6 @@ router.post("/create", authMiddleware, async (req, res) => {
           name,
           type,
           Buffer.from(ciphertext, "base64"),
-          Buffer.from(nonce, "base64")
         ],
         type: QueryTypes.INSERT
       }
@@ -181,11 +178,12 @@ router.post("/create", authMiddleware, async (req, res) => {
 router.put("/update/:id", authMiddleware, async (req, res) => {
   const userId = req.user.id;
   const secretId = req.params.id;
-  const { type, name, ciphertext, nonce } = req.body;
+  const { type, name, ciphertext } = req.body;
+  console.log(type,name,ciphertext)
 
-  if (!type || !name || !ciphertext || !nonce) {
+  if (!type || !name || !ciphertext) {
     return res.status(400).json({
-      message: "type, name, ciphertext and nonce are required"
+      message: "type, name and ciphertextare required"
     });
   }
 
@@ -193,7 +191,7 @@ router.put("/update/:id", authMiddleware, async (req, res) => {
     const result = await sequelize.query(
       `
       UPDATE secrets
-      SET type = ?, name = ?, ciphertext = ?, nonce = ?, updated_at = NOW()
+      SET type = ?, name = ?, ciphertext = ?, updated_at = NOW()
       WHERE id = ? AND owner_id = ?
       `,
       {
@@ -201,7 +199,6 @@ router.put("/update/:id", authMiddleware, async (req, res) => {
           type,
           name,
           Buffer.from(ciphertext, "base64"),
-          Buffer.from(nonce, "base64"),
           secretId,
           userId
         ],
@@ -462,7 +459,6 @@ router.get("/org/secrets", authMiddleware, async (req, res) => {
         os.name, 
         os.encrypted_cipher_key, 
         os.ciphertext, 
-        os.nonce, 
         os.created_at, 
         os.updated_at
       FROM organization_secrets os
@@ -487,7 +483,6 @@ router.get("/org/secrets", authMiddleware, async (req, res) => {
       name: secret.name,
       encrypted_cipher_key: Buffer.from(secret.encrypted_cipher_key).toString("base64"),
       ciphertext: Buffer.from(secret.ciphertext).toString("base64"),
-      nonce: Buffer.from(secret.nonce).toString("base64"),
       created_at: secret.created_at,
       updated_at: secret.updated_at
     }));

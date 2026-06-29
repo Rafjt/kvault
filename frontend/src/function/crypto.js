@@ -134,25 +134,39 @@ export async function encryptSecret(value, masterKey) {
     encoded
   )
 
-  return {
-    ciphertext: btoa(String.fromCharCode(...new Uint8Array(encrypted))),
-    nonce: btoa(String.fromCharCode(...iv))
-  }
+  const combined = new Uint8Array(
+    iv.length + encrypted.byteLength
+  )
+  combined.set(iv, 0)
+
+  combined.set(
+    new Uint8Array(encrypted),
+    iv.length
+  )
+
+  return btoa(
+    String.fromCharCode(...combined)
+  )
 }
 
-export async function decryptSecret(ciphertextB64, nonceB64, masterKey) {
+export async function decryptSecret(ciphertextB64, masterKey) {
   if (!masterKey) {
     throw new Error("MasterKey not loaded");
   }
 
-  const ciphertext = Uint8Array.from(atob(ciphertextB64), c => c.charCodeAt(0));
-  const iv = Uint8Array.from(atob(nonceB64), c => c.charCodeAt(0));
+  const combined = Uint8Array.from(
+    atob(ciphertextB64),
+    c => c.charCodeAt(0)
+  )
+
+  const iv = combined.slice(0, 12)
+
+  const ciphertext = combined.slice(12)
 
   const decrypted = await crypto.subtle.decrypt(
     {
       name: "AES-GCM",
-      iv,
-      tagLength: 128
+      iv
     },
     masterKey,
     ciphertext

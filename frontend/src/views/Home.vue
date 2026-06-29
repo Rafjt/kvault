@@ -93,7 +93,9 @@ const fetchSecrets = async () => {
         //console.log("cipher length:", ciphertext.length)
         showValues.value[s.id] = false;
         try {
-          s.value = await decryptSecret(s.ciphertext, s.nonce, cryptoStore.masterKey)
+          console.log("masterKey =", cryptoStore.masterKey)
+          console.log("instanceof CryptoKey =", cryptoStore.masterKey instanceof CryptoKey)
+          s.value = await decryptSecret(s.ciphertext, cryptoStore.masterKey)
         } catch (e) {
           console.error("Decrypt error for secret", s.id, e);
           s.value = "ERROR";
