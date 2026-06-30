@@ -429,6 +429,51 @@ router.get("/org", authMiddleware, async (req, res) => {
 
 })
 
+router.get("/org/:id", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const orgId = req.params.id;
+
+  try {
+    const organization = await sequelize.query(
+      `
+      SELECT 
+        o.id, 
+        o.name, 
+        o.created_at,
+        om.protected_osk, -- Récupération de l'OSK spécifique à cet utilisateur
+        (SELECT COUNT(*) FROM organization_secrets WHERE organization_id = o.id) AS secret_count
+      FROM organizations o
+      INNER JOIN org_members om 
+        ON om.organization_id = o.id
+      WHERE om.user_id = :userId 
+        AND o.id = :orgId
+      LIMIT 1;
+      `,
+      {
+        replacements: { userId, orgId },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    if (!organization || organization.length === 0) {
+      return res.status(404).json({ 
+        message: "Organisation introuvable ou accès non autorisé." 
+      });
+    }
+
+    // On renvoie l'organisation avec l'OSK protégée
+    res.json({
+      organization: organization[0]
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      message: "Internal server error"
+    });
+  }
+});
+
 router.get("/org/secrets", authMiddleware, async (req, res) => {
   const userId = req.user.id;
   const { type, name } = req.query;
@@ -498,5 +543,119 @@ router.get("/org/secrets", authMiddleware, async (req, res) => {
     });
   }
 });
+
+router.post("/org/:organizationId/secrets", authMiddleware, async (req, res) => {
+
+  const userId = req.user.id
+  console.log("")
+
+  const {
+    organizationId,
+    name,
+    type,
+    encryptedCipherKey,
+    ciphertext
+  } = req.body
+
+  console.log(req.body)
+
+  if (
+    !organizationId ||
+    !name ||
+    !type ||
+    !encryptedCipherKey ||
+    !ciphertext
+  ) {
+    return res.status(400).json({
+      message: "organizationId, name, type, encryptedCipherKey and ciphertext are required"
+    })
+  }
+
+  try {
+
+    // ============================
+    // Vérifie que le user appartient
+    // à l'organisation
+    // ============================
+
+    const member = await sequelize.query(
+      `
+      SELECT 1
+      FROM org_members
+      WHERE organization_id = :organizationId
+      AND user_id = :userId
+      LIMIT 1
+      `,
+      {
+        replacements: {
+          organizationId,
+          userId
+        },
+        type: QueryTypes.SELECT
+      }
+    )
+
+    if (member.length === 0) {
+      return res.status(403).json({
+        message: "You are not a member of this organization."
+      })
+    }
+
+    // ============================
+    // Création du secret
+    // ============================
+
+    await sequelize.query(
+      `
+      INSERT INTO organization_secrets
+      (
+        organization_id,
+        type,
+        name,
+        encrypted_cipher_key,
+        ciphertext
+      )
+      VALUES
+      (
+        :organizationId,
+        :type,
+        :name,
+        FROM_BASE64(:encryptedCipherKey),
+        FROM_BASE64(:ciphertext)
+      )
+      `,
+      {
+        replacements: {
+          organizationId,
+          type,
+          name,
+          encryptedCipherKey,
+          ciphertext
+        },
+        type: QueryTypes.INSERT
+      }
+    )
+
+    return res.status(201).json({
+      message: "Organization secret created successfully"
+    })
+
+  } catch (err) {
+
+    req.log?.error(
+      {
+        err,
+        userId,
+        organizationId
+      },
+      "Create organization secret error"
+    )
+
+    return res.status(500).json({
+      message: "Internal server error", err
+    })
+  }
+
+})
 
 module.exports = router;

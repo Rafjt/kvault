@@ -5,7 +5,8 @@ export const useCryptoStore = defineStore("crypto", {
     /** @type {CryptoKey|null} */
     masterKey: null,
     rsaPublicKey: null,
-    rsaPrivateKey: null
+    rsaPrivateKey: null,
+    organizationKeys: {}
   }),
 
   actions: {
@@ -32,11 +33,31 @@ export const useCryptoStore = defineStore("crypto", {
 
     },
 
+    setOrganizationKey(orgId, key) {
+
+        this.organizationKeys[String(orgId)] = key
+
+    },
+
+    getOrganizationKey(orgId) {
+
+        return this.organizationKeys[String(orgId)] ?? null
+
+    },
+
+    removeOrganizationKey(orgId) {
+
+        delete this.organizationKeys[String(orgId)]
+
+    },
+
+
     clear() {
 
       this.masterKey = null
       this.rsaPublicKey = null
       this.rsaPrivateKey = null
+      this.organizationKeys = {}
 
     }
 

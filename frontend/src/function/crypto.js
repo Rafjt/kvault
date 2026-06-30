@@ -8,6 +8,48 @@ import { argon2id } from 'hash-wasm'
 
 // generateAESKey()
 
+export async function generateAESKey() {
+  const cipherKey = await crypto.subtle.generateKey(
+  {
+    name: "AES-GCM",
+    length: 256
+  },
+  true,
+  ["encrypt","decrypt"]
+  )
+  return cipherKey
+}
+
+export async function encryptAESKey(rawKey, wrappingKey) {
+
+    if (!wrappingKey) {
+        throw new Error("Wrapping key not loaded")
+    }
+
+    const iv = crypto.getRandomValues(new Uint8Array(12))
+
+    const encrypted = await crypto.subtle.encrypt(
+        {
+            name: "AES-GCM",
+            iv
+        },
+        wrappingKey,
+        rawKey
+    )
+
+    const combined = new Uint8Array(
+        iv.length + encrypted.byteLength
+    )
+
+    combined.set(iv, 0)
+    combined.set(new Uint8Array(encrypted), iv.length)
+
+    return btoa(
+        String.fromCharCode(...combined)
+    )
+
+}
+
 // ======
 //  KEK
 // ======
@@ -149,24 +191,39 @@ export async function encryptSecret(value, masterKey) {
   )
 }
 
-export async function decryptSecret(ciphertextB64, masterKey) {
+export async function decryptSecret(encryptedData, masterKey) {
   if (!masterKey) {
     throw new Error("MasterKey not loaded");
   }
 
-  const combined = Uint8Array.from(
-    atob(ciphertextB64),
-    c => c.charCodeAt(0)
-  )
+  let combined;
 
-  const iv = combined.slice(0, 12)
+  // 1. On détecte le format de l'entrée pour le convertir en Uint8Array
+  if (encryptedData && encryptedData.type === 'Buffer' && Array.isArray(encryptedData.data)) {
+    // Si c'est le Buffer brut envoyé par Sequelize/MySQL
+    combined = new Uint8Array(encryptedData.data);
+  } else if (typeof encryptedData === 'string') {
+    // Si c'est une chaîne Base64 standard
+    combined = Uint8Array.from(
+      atob(encryptedData),
+      c => c.charCodeAt(0)
+    );
+  } else if (encryptedData instanceof Uint8Array) {
+    // Si c'est déjà un Uint8Array
+    combined = encryptedData;
+  } else {
+    throw new Error("Format de données chiffrées invalide ou inconnu");
+  }
 
-  const ciphertext = combined.slice(12)
+  // 2. Extraction de l'IV (12 octets pour AES-GCM) et du ciphertext
+  const iv = combined.slice(0, 12);
+  const ciphertext = combined.slice(12);
 
+  // 3. Déchiffrement avec WebCrypto API
   const decrypted = await crypto.subtle.decrypt(
     {
       name: "AES-GCM",
-      iv
+      iv: iv
     },
     masterKey,
     ciphertext
@@ -174,7 +231,6 @@ export async function decryptSecret(ciphertextB64, masterKey) {
   
   return new TextDecoder().decode(decrypted);
 }
-
 // ==============================
 //  ORGANIZATIONS AND ORG_SECRETS
 // ==============================
@@ -202,4 +258,89 @@ export async function encryptOsk(oskRaw, masterKey) {
   combinedBuffer.set(ciphertextArray, iv.length);
 
   return btoa(String.fromCharCode(...combinedBuffer));
+}
+
+export async function decryptOsk(encryptedOsk, masterKey) {
+  if (!masterKey) {
+    throw new Error("MasterKey not loaded");
+  }
+
+  let combinedBuffer;
+
+  // 1. Détection du format (Buffer de Sequelize, String Base64 ou Uint8Array)
+  if (encryptedOsk && encryptedOsk.type === 'Buffer' && Array.isArray(encryptedOsk.data)) {
+    // Si Sequelize renvoie l'objet binaire direct
+    combinedBuffer = new Uint8Array(encryptedOsk.data);
+  } else if (typeof encryptedOsk === 'string') {
+    // Si c'est une chaîne Base64 standard
+    const encryptedString = atob(encryptedOsk);
+    combinedBuffer = new Uint8Array(encryptedString.length);
+    for (let i = 0; i < encryptedString.length; i++) {
+      combinedBuffer[i] = encryptedString.charCodeAt(i);
+    }
+  } else if (encryptedOsk instanceof Uint8Array) {
+    combinedBuffer = encryptedOsk;
+  } else {
+    throw new Error("Format de l'OSK chiffrée invalide ou inconnu");
+  }
+
+  // 2. Extraire l'IV (les 12 premiers octets)
+  const ivLength = 12;
+  if (combinedBuffer.length < ivLength) {
+    throw new Error("Données invalides : taille insuffisante");
+  }
+  const iv = combinedBuffer.slice(0, ivLength);
+
+  // 3. Extraire le texte chiffré (le reste)
+  const ciphertextArray = combinedBuffer.slice(ivLength);
+
+  // 4. Déchiffrer avec Web Crypto API (AES-GCM)
+  const decryptedBuffer = await crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv: iv
+    },
+    masterKey,
+    ciphertextArray
+  );
+
+  // Retourne un ArrayBuffer (oskRaw d'origine)
+  return decryptedBuffer; 
+}
+
+export async function encryptOrganizationSecret(plaintext,osk) {
+    const cipherKey = await generateAESKey()
+
+    const rawCipherKey = await crypto.subtle.exportKey(
+        "raw",
+        cipherKey
+    )
+
+    const ciphertext = await encryptSecret(
+        plaintext,
+        cipherKey
+    )
+
+    console.log(ciphertext)
+
+    const encryptedCipherKey = await encryptAESKey(
+        rawCipherKey,
+        osk
+    )
+
+    return [ciphertext, encryptedCipherKey]
+
+}
+
+export async function importOSK(oskRaw) {
+  return await crypto.subtle.importKey(
+    "raw",
+    oskRaw,
+    {
+      name: "AES-GCM",
+      length: 256
+    },
+    true, // Permet d'exporter la clé si nécessaire (mettez false si vous voulez la verrouiller en mémoire)
+    ["encrypt", "decrypt"] // Les usages autorisés pour cette clé
+  );
 }
