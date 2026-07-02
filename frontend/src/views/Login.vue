@@ -1,24 +1,26 @@
 <script setup>
-import { ref } from "vue"
-import { useRouter } from "vue-router"
-import { useCryptoStore } from "../stores/crypto.store"
-import { API_AUTH_URL } from "../components/constant.js"
-import { argon2id } from 'hash-wasm'
+import { ref } from "vue";
+import { useRouter } from "vue-router";
+import { useCryptoStore } from "../stores/crypto.store";
+import { API_AUTH_URL } from "../components/constant.js";
+import { argon2id } from "hash-wasm";
 
-const router = useRouter()
-const cryptoStore = useCryptoStore()
+const router = useRouter();
+const cryptoStore = useCryptoStore();
 
-const email = ref("")
-const password = ref("")
-const loading = ref(false)
-const errorMessage = ref("")
-const successMessage = ref("")
+const showCurrentPassword = ref(false);
+
+const email = ref("");
+const password = ref("");
+const loading = ref(false);
+const errorMessage = ref("");
+const successMessage = ref("");
 
 const onSubmit = async (e) => {
-  e.preventDefault()
-  errorMessage.value = ""
-  successMessage.value = ""
-  loading.value = true
+  e.preventDefault();
+  errorMessage.value = "";
+  successMessage.value = "";
+  loading.value = true;
 
   try {
     const res = await fetch(`${API_AUTH_URL}/login`, {
@@ -27,37 +29,36 @@ const onSubmit = async (e) => {
       credentials: "include",
       body: JSON.stringify({
         email: email.value,
-        password: password.value
-      })
-    })
+        password: password.value,
+      }),
+    });
 
-    const data = await res.json().catch(() => ({}))
+    const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      errorMessage.value = data.message || "Login failed"
-      return
+      errorMessage.value = data.message || "Login failed";
+      return;
     }
 
-    successMessage.value = data.message || "Login successful"
+    successMessage.value = data.message || "Login successful";
 
     // =========================
     // 🔐 CRYPTO — MASTER KEY
     // =========================
 
     if (!data.crypto?.encrypted_master_key || !data.crypto?.kdf_salt) {
-      throw new Error("Missing crypto payload from backend")
+      throw new Error("Missing crypto payload from backend");
     }
 
     // Base64 → Uint8Array
     const encryptedMKFull = Uint8Array.from(
       atob(data.crypto.encrypted_master_key),
-      c => c.charCodeAt(0)
-    )
+      (c) => c.charCodeAt(0),
+    );
 
-    const kdfSalt = Uint8Array.from(
-      atob(data.crypto.kdf_salt),
-      c => c.charCodeAt(0)
-    )
+    const kdfSalt = Uint8Array.from(atob(data.crypto.kdf_salt), (c) =>
+      c.charCodeAt(0),
+    );
 
     // =========================
     // ARGON2 → KEK
@@ -70,17 +71,16 @@ const onSubmit = async (e) => {
       iterations: 3,
       memorySize: 65536,
       hashLength: 32,
-      outputType: 'binary'
-    })
-
+      outputType: "binary",
+    });
 
     const kek = await crypto.subtle.importKey(
       "raw",
       kekRaw,
       { name: "AES-GCM" },
       false,
-      ["decrypt"]
-    )
+      ["decrypt"],
+    );
 
     console.log(kek);
 
@@ -88,49 +88,48 @@ const onSubmit = async (e) => {
     // AES-GCM — DECHIFFRE MK
     // =========================
     // 1. Les 12 premiers octets pour l'IV
-    const iv = encryptedMKFull.slice(0, 12)
+    const iv = encryptedMKFull.slice(0, 12);
 
     // 2. TOUT le reste (le ciphertext ET le tag d'authentification combinés)
-    const encryptedDataWithoutIv = encryptedMKFull.slice(12)
+    const encryptedDataWithoutIv = encryptedMKFull.slice(12);
 
     const decryptedMKBuffer = await crypto.subtle.decrypt(
       {
         name: "AES-GCM",
         iv: iv,
-        tagLength: 128 // Optionnel (128 bits / 16 octets est la valeur par défaut)
+        tagLength: 128, // Optionnel (128 bits / 16 octets est la valeur par défaut)
       },
       kek,
-      encryptedDataWithoutIv // On passe le bloc complet
-    )
-    
+      encryptedDataWithoutIv, // On passe le bloc complet
+    );
+
     // =========================
     // Import Master Key (AES-GCM)
     // =========================
-    await cryptoStore.setMasterKey(decryptedMKBuffer)
+    await cryptoStore.setMasterKey(decryptedMKBuffer);
 
     // 🔐 On ne garde JAMAIS le mot de passe
-    password.value = ""
+    password.value = "";
 
-    router.push("/home")
-
+    router.push("/home");
   } catch (err) {
-    console.error("LOGIN CRYPTO ERROR:", err)
-    errorMessage.value = "Authentication or crypto error"
+    console.error("LOGIN CRYPTO ERROR:", err);
+    errorMessage.value = "Authentication or crypto error";
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 </script>
 
 <template>
   <div>
     <h2>Login</h2>
 
-    <div v-if="errorMessage" style="color:#b91c1c">
+    <div v-if="errorMessage" style="color: #b91c1c">
       {{ errorMessage }}
     </div>
 
-    <div v-if="successMessage" style="color:#065f46">
+    <div v-if="successMessage" style="color: #065f46">
       {{ successMessage }}
     </div>
 
@@ -142,7 +141,15 @@ const onSubmit = async (e) => {
 
       <div>
         <label>Password</label>
-        <input v-model="password" type="password" required />
+        <div class="input-wrapper">
+          <input
+            v-model="password"
+            :type="password ? 'text' : 'password'"
+            required
+          />
+
+          <input type="checkbox" v-model="showCurrentPassword" class="toggle" />
+        </div>
       </div>
 
       <p>
