@@ -670,7 +670,6 @@ router.post("/org/:organizationId/secrets", authMiddleware, async (req, res) => 
 
 })
 
-
 router.delete("/org/:id", authMiddleware, async (req, res) => {
   const userId = req.user.id;
   const orgId = req.params.id;
@@ -720,6 +719,66 @@ router.delete("/org/:id", authMiddleware, async (req, res) => {
 
     res.json({
       message: "L'organisation et toutes ses données associées ont été supprimées avec succès."
+    });
+
+  } catch (err) {
+    console.error("Erreur lors de la suppression de l'organisation :", err);
+    res.status(500).json({
+      message: "Internal server error"
+    });
+  }
+});
+
+router.delete("/org/secret/:secretId", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const secretId = req.params.secretId;
+  const { orgId } = req.body;
+
+  try {
+    // Vérification de la légitimité et des droits (Rôle) de l'utilisateur
+    const memberCheck = await sequelize.query(
+      `
+      SELECT role 
+      FROM org_members 
+      WHERE user_id = :userId AND organization_id = :orgId
+      LIMIT 1;
+      `,
+      {
+        replacements: { userId, orgId },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    // Si l'utilisateur n'est pas trouvé dans la table de pivot, il n'appartient pas à l'org
+    if (!memberCheck || memberCheck.length === 0) {
+      return res.status(404).json({ 
+        message: "Organisation introuvable ou vous n'en êtes pas membre." 
+      });
+    }
+
+    const userRole = memberCheck[0].role;
+
+    // Seuls le créateur ('owner') ou un 'admin' peuvent supprimer le secret
+    if (userRole !== 'owner' && userRole !== 'admin') {
+      return res.status(403).json({ 
+        message: "Action non autorisée. Vous devez être administrateur ou propriétaire pour supprimer ce secret." 
+      });
+    }
+
+    // Suppression de l'organisation
+    await sequelize.query(
+      `
+      DELETE FROM organization_secrets 
+      WHERE id = :secretId;
+      `,
+      {
+        replacements: { secretId },
+        type: QueryTypes.DELETE
+      }
+    );
+
+    res.json({
+      message: "Le a été supprimées avec succès."
     });
 
   } catch (err) {

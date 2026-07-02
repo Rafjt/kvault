@@ -30,12 +30,10 @@ onMounted(async () => {
   try {
     loading.value = true
     const data = await fetchOrg(props.orgId)
-    console.log("Type de protected_osk :", typeof data.organization.protected_osk)
-    console.log("Contenu de protected_osk :", data.organization.protected_osk)
     
     // On déchiffre l'OSK
     const decryptedOsk = await decryptOsk(
-        data.organization.protected_osk, // Attention, ton API renvoie { organization: { ... } }
+        data.organization.protected_osk,
         cryptoStore.masterKey
     )
 
@@ -82,8 +80,8 @@ async function submitSecret() {
         organizationId: props.orgId,
         name: form.value.name,
         type: form.value.type,
-        ciphertext: ciphertext,          // Correction ici (ciphertext direct)
-        encryptedCipherKey: encryptedCipherKey // Correction ici
+        ciphertext: ciphertext,
+        encryptedCipherKey: encryptedCipherKey
       })
     })
 

@@ -3,7 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from "vue-router"
 import { API_BASE_URL } from "../components/constant.js"
 import { useCryptoStore } from "../stores/crypto.store"
-import { decryptOrganizationSecret, decryptOsk } from '../function/crypto.js'
+import { decryptOrganizationSecret, decryptOsk, importOSK } from '../function/crypto.js'
 
 const router = useRouter()
 const cryptoStore = useCryptoStore()
@@ -47,7 +47,9 @@ const fetchOrgSecrets = async () => {
 
     const fetchedSecrets = data.secrets || []
 
-    const osk = await decryptOsk(data.protected_osk,cryptoStore.masterKey)
+    const rawOosk = await decryptOsk(data.protected_osk,cryptoStore.masterKey)
+
+    const osk = await importOSK(rawOosk)
 
     // Déchiffrement initial de l'ensemble des secrets reçus
     for (const s of fetchedSecrets) {
@@ -76,6 +78,41 @@ const toggleValue = (id) => {
 
 const handleUpdateSecret = (secretId) => {
   router.push(`/updateOrgSecret/${secretId}`)
+}
+
+const deleteSecret = async (secretId, orgId) => {
+
+  console.log(secretId)
+  console.log(orgId)
+  if (!confirm("Delete this secret ?")) {
+    return
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/org/secret/${secretId}`, {
+      method: "DELETE",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        orgId: props.orgId
+      })
+    })
+
+    const data = await res.json().catch(() => ({}))
+
+    if (!res.ok) {
+      throw new Error(data.message || "Failed to delete secret")
+    }
+
+    // retire immédiatement le secret de la liste
+    secrets.value = secrets.value.filter(s => s.id !== secretId)
+
+  } catch (err) {
+    console.error(err)
+    alert(err.message)
+  }
 }
 
 // Filtrage local en synchrone basé sur le comportement de ton Home
@@ -169,6 +206,9 @@ onMounted(() => {
           <button @click="handleUpdateSecret(secret.id)">
             Update
           </button>
+          <button @click="deleteSecret(secret.id, props.orgId)">
+            Delete
+        </button>
         </div>
       </li>
     </ul>

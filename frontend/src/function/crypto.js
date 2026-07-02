@@ -221,7 +221,7 @@ export async function decryptSecret(encryptedData, masterKey) {
 
   let combined;
 
-  // 1. On détecte le format de l'entrée pour le convertir en Uint8Array
+  //On détecte le format de l'entrée pour le convertir en Uint8Array
   if (encryptedData && encryptedData.type === 'Buffer' && Array.isArray(encryptedData.data)) {
     // Si c'est le Buffer brut envoyé par Sequelize/MySQL
     combined = new Uint8Array(encryptedData.data);
@@ -238,7 +238,7 @@ export async function decryptSecret(encryptedData, masterKey) {
     throw new Error("Format de données chiffrées invalide ou inconnu");
   }
 
-  // 2. Extraction de l'IV (12 octets pour AES-GCM) et du ciphertext
+  // Extraction de l'IV et du ciphertext
   const iv = combined.slice(0, 12);
   const ciphertext = combined.slice(12);
 
@@ -304,13 +304,13 @@ export async function decryptOsk(encryptedOsk, masterKey) {
   } else if (encryptedOsk instanceof Uint8Array) {
     combinedBuffer = encryptedOsk;
   } else {
-    throw new Error("Format de l'OSK chiffrée invalide ou inconnu");
+    throw new Error("Unknown or invalid OSK format");
   }
 
   // 2. Extraire l'IV (les 12 premiers octets)
   const ivLength = 12;
   if (combinedBuffer.length < ivLength) {
-    throw new Error("Données invalides : taille insuffisante");
+    throw new Error("Invalid Data : lenght insufficient");
   }
   const iv = combinedBuffer.slice(0, ivLength);
 
@@ -327,17 +327,19 @@ export async function decryptOsk(encryptedOsk, masterKey) {
     ciphertextArray
   );
 
+  return rawKey
+  
   // Retourne un ArrayBuffer (oskRaw d'origine)
-  return await crypto.subtle.importKey(
-      "raw",
-      rawKey,
-      {
-          name: "AES-GCM",
-          length: 256
-      },
-      false,
-      ["encrypt", "decrypt"]
-  ) 
+  // return await crypto.subtle.importKey(
+  //     "raw",
+  //     rawKey,
+  //     {
+  //         name: "AES-GCM",
+  //         length: 256
+  //     },
+  //     false,
+  //     ["encrypt", "decrypt"]
+  // ) 
 }
 
 export async function encryptOrganizationSecret(plaintext,osk) {
@@ -365,24 +367,22 @@ export async function encryptOrganizationSecret(plaintext,osk) {
 }
 
 export async function decryptOrganizationSecret(ciphertext, encryptedCipherKey, osk) {
-    // 1. Déchiffrer la clé du secret à l'aide de l'OSK (Clé de l'Organisation)
-    // On suppose que ta fonction "decryptAESKey" prend la clé chiffrée et la clé de chiffrement parente (osk)
+    // Déchiffrer la clé du secret à l'aide de l'OSK (Clé de l'Organisation)
     const rawCipherKey = await decryptAESKey(
         encryptedCipherKey,
         osk
     )
 
-    // 2. Importer la clé brute récupérée pour que Web Crypto puisse l'utiliser
+    // Importer la clé brute récupérée pour que Web Crypto puisse l'utiliser
     const cipherKey = await crypto.subtle.importKey(
         "raw",
         rawCipherKey,
-        { name: "AES-GCM" }, // Ajuste l'algorithme ("AES-GCM" ou "AES-CBC") selon ce qu'utilise "generateAESKey"
+        { name: "AES-GCM" },
         true,
         ["decrypt"]
     )
 
-    // 3. Déchiffrer le secret avec la clé désormais en clair
-    // On suppose que ta fonction "decryptSecret" prend le texte chiffré et l'objet CryptoKey
+    // Déchiffrer le secret avec la clé désormais en clair
     const plaintext = await decryptSecret(
         ciphertext,
         cipherKey
@@ -400,6 +400,6 @@ export async function importOSK(oskRaw) {
       length: 256
     },
     true, // Permet d'exporter la clé si nécessaire (mettez false si vous voulez la verrouiller en mémoire)
-    ["encrypt", "decrypt"] // Les usages autorisés pour cette clé
+    ["encrypt", "decrypt"]
   );
 }
