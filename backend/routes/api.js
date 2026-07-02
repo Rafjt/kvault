@@ -377,17 +377,16 @@ router.post("/org/create", authMiddleware, async (req, res) => {
 });
 
 router.get("/org", authMiddleware, async (req, res) => {
-
   const userId = req.user.id
 
   try {
-
     const organizations = await sequelize.query(
       `
       SELECT
         o.id,
         o.name,
         o.created_at,
+        om.role, -- Ajout du rôle de l'utilisateur dans l'organisation
         COUNT(os.id) AS secret_count
       FROM organizations o
 
@@ -402,7 +401,8 @@ router.get("/org", authMiddleware, async (req, res) => {
       GROUP BY
         o.id,
         o.name,
-        o.created_at
+        o.created_at,
+        om.role -- Requis dans le GROUP BY car om.role n'est pas une fonction d'agrégation
 
       ORDER BY o.name
       `,
@@ -418,15 +418,11 @@ router.get("/org", authMiddleware, async (req, res) => {
     })
 
   } catch (err) {
-
     console.error(err)
-
     res.status(500).json({
       message: "Internal server error"
     })
-
   }
-
 })
 
 router.get("/org/:id", authMiddleware, async (req, res) => {
@@ -441,6 +437,7 @@ router.get("/org/:id", authMiddleware, async (req, res) => {
         o.name, 
         o.created_at,
         om.protected_osk, -- Récupération de l'OSK spécifique à cet utilisateur
+        om.role,          -- Récupération du rôle de l'utilisateur (owner, admin, member)
         (SELECT COUNT(*) FROM organization_secrets WHERE organization_id = o.id) AS secret_count
       FROM organizations o
       INNER JOIN org_members om 
@@ -461,7 +458,7 @@ router.get("/org/:id", authMiddleware, async (req, res) => {
       });
     }
 
-    // On renvoie l'organisation avec l'OSK protégée
+    // On renvoie l'organisation avec l'OSK protégée et le rôle
     res.json({
       organization: organization[0]
     });
@@ -474,27 +471,13 @@ router.get("/org/:id", authMiddleware, async (req, res) => {
   }
 });
 
-router.get("/org/secrets", authMiddleware, async (req, res) => {
+router.get("/org/:id/secrets", authMiddleware, async (req, res) => {
   const userId = req.user.id;
-  const { type, name } = req.query;
+  const orgId = req.params.id;
 
   try {
-    // Construction de la clause WHERE dynamique pour les filtres optionnels
-    let filterClause = "";
-    const replacements = { userId };
-
-    if (type) {
-      filterClause += " AND os.type = :type";
-      replacements.type = type;
-    }
-
-    if (name) {
-      filterClause += " AND os.name LIKE :name";
-      replacements.name = `%${name}%`;
-    }
-
-    // Requête SQL : On sélectionne les secrets des organisations où l'utilisateur est membre
-    const secrets = await sequelize.query(
+    // Requête SQL optimisée : On récupère les secrets ET la protected_osk du membre demandeur
+    const rows = await sequelize.query(
       `
       SELECT 
         os.id, 
@@ -505,25 +488,52 @@ router.get("/org/secrets", authMiddleware, async (req, res) => {
         os.encrypted_cipher_key, 
         os.ciphertext, 
         os.created_at, 
-        os.updated_at
+        os.updated_at,
+        om.protected_osk
       FROM organization_secrets os
       INNER JOIN organizations o ON os.organization_id = o.id
       INNER JOIN org_members om ON o.id = om.organization_id
-      WHERE om.user_id = :userId
-      ${filterClause}
-      ORDER BY os.created_at DESC
+      WHERE o.id = :orgId AND om.user_id = :userId
+      ORDER BY os.created_at DESC;
       `,
       {
-        replacements,
+        replacements: { orgId, userId },
         type: QueryTypes.SELECT
       }
     );
 
-    // Formatage des données binaires (VARBINARY -> Base64)
-    const formattedSecrets = secrets.map(secret => ({
+    // Si l'utilisateur n'est pas membre ou que l'orga n'existe pas, rows sera vide.
+    // Mais attention : si l'orga existe, que le user est membre, mais qu'il n'y a juste AUCUN secret,
+    // rows sera également vide ! Il faut donc gérer ça proprement.
+    
+    let protectedOskBase64 = null;
+
+    // Si on a des lignes, on extrait la protected_osk de la première ligne
+    if (rows.length > 0) {
+      protectedOskBase64 = Buffer.from(rows[0].protected_osk).toString("base64");
+    } else {
+      // Optionnel / Sécurité : Si la liste est vide, on vérifie si le user est au moins membre
+      // pour lui renvoyer sa protected_osk même s'il n'y a aucun secret à afficher.
+      const memberCheck = await sequelize.query(
+        `SELECT protected_osk FROM org_members WHERE organization_id = :orgId AND user_id = :userId LIMIT 1;`,
+        {
+          replacements: { orgId, userId },
+          type: QueryTypes.SELECT
+        }
+      );
+
+      if (memberCheck.length === 0) {
+        return res.status(403).json({ message: "Access denied or organization not found" });
+      }
+      
+      protectedOskBase64 = Buffer.from(memberCheck[0].protected_osk).toString("base64");
+    }
+
+    // Formatage des secrets (VARBINARY -> Base64)
+    const formattedSecrets = rows.map(secret => ({
       id: secret.id,
       organization_id: secret.organization_id,
-      organization_name: secret.organization_name, // Pratique pour l'UI côté front
+      organization_name: secret.organization_name,
       type: secret.type,
       name: secret.name,
       encrypted_cipher_key: Buffer.from(secret.encrypted_cipher_key).toString("base64"),
@@ -532,12 +542,14 @@ router.get("/org/secrets", authMiddleware, async (req, res) => {
       updated_at: secret.updated_at
     }));
 
+    // On renvoie l'enveloppe contenant la clé de l'orga ET les secrets associés
     return res.status(200).json({
+      protected_osk: protectedOskBase64,
       secrets: formattedSecrets
     });
 
   } catch (error) {
-    req.log?.error({ err: error, userId }, "List all accessible organization secrets error");
+    console.error("List organization secrets error:", error);
     return res.status(500).json({
       message: "Internal server error"
     });
@@ -657,5 +669,65 @@ router.post("/org/:organizationId/secrets", authMiddleware, async (req, res) => 
   }
 
 })
+
+
+router.delete("/org/:id", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const orgId = req.params.id;
+
+  try {
+    // Vérification de la légitimité et des droits (Rôle) de l'utilisateur
+    const memberCheck = await sequelize.query(
+      `
+      SELECT role 
+      FROM org_members 
+      WHERE user_id = :userId AND organization_id = :orgId
+      LIMIT 1;
+      `,
+      {
+        replacements: { userId, orgId },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    // Si l'utilisateur n'est pas trouvé dans la table de pivot, il n'appartient pas à l'org
+    if (!memberCheck || memberCheck.length === 0) {
+      return res.status(404).json({ 
+        message: "Organisation introuvable ou vous n'en êtes pas membre." 
+      });
+    }
+
+    const userRole = memberCheck[0].role;
+
+    // Seuls le créateur ('owner') ou un 'admin' peuvent supprimer l'organisation
+    if (userRole !== 'owner' && userRole !== 'admin') {
+      return res.status(403).json({ 
+        message: "Action non autorisée. Vous devez être administrateur ou propriétaire pour supprimer cette organisation." 
+      });
+    }
+
+    // Suppression de l'organisation
+    await sequelize.query(
+      `
+      DELETE FROM organizations 
+      WHERE id = :orgId;
+      `,
+      {
+        replacements: { orgId },
+        type: QueryTypes.DELETE
+      }
+    );
+
+    res.json({
+      message: "L'organisation et toutes ses données associées ont été supprimées avec succès."
+    });
+
+  } catch (err) {
+    console.error("Erreur lors de la suppression de l'organisation :", err);
+    res.status(500).json({
+      message: "Internal server error"
+    });
+  }
+});
 
 module.exports = router;

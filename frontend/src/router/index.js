@@ -6,7 +6,8 @@ import Create from '../views/CreateSecret.vue'
 import Update from '../views/UpdateSecret.vue'
 import ChangePassword from "../views/ChangePassword.vue";
 import CreateOrg from '../views/CreateOrg.vue'
-import CreateOrgSecret from '../views/CreateOrgSecret.vue' 
+import CreateOrgSecret from '../views/CreateOrgSecret.vue'
+import OrganizationSecret from '../views/OrganizationSecret.vue'
 
 
 
@@ -19,9 +20,9 @@ const routes = [
   { path: "/update/:id", name: "UpdateSecret", component: Update, meta: { requiresAuth: true } },
   { path: "/change-password", name: "ChangePassword", component: ChangePassword, meta: { requiresAuth: true } },
   { path: "/createOrg", name: "createOrg", component: CreateOrg, meta: { requiresAuth: true } },
-    {path: '/createOrgSecret/:orgId',name: 'createOrgSecret',component: CreateOrgSecret, props: true, meta: { requiresAuth: true }
-  },
-// Captulle toutes les routes non trouvées et redirige
+  { path: '/createOrgSecret/:orgId', name: 'createOrgSecret',component: CreateOrgSecret, props: true, meta: { requiresAuth: true } },
+  { path: '/org/:orgId', name: 'organizationSecret', component: OrganizationSecret, props: true, meta: { requiresAuth: true } },
+  // Capture toutes les routes non trouvées et redirige
   { path: '/:catchAll(.*)', redirect: '/login' }
 ]
 

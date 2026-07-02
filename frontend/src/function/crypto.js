@@ -1,12 +1,8 @@
 import { argon2id } from 'hash-wasm'
 
-// encryptBinary(...)
-// decryptBinary(...)
-
-// encryptOSK(...)
-// decryptOSK()
-
-// generateAESKey()
+// ======
+//  AES
+// ======
 
 export async function generateAESKey() {
   const cipherKey = await crypto.subtle.generateKey(
@@ -47,6 +43,33 @@ export async function encryptAESKey(rawKey, wrappingKey) {
     return btoa(
         String.fromCharCode(...combined)
     )
+
+}
+
+export async function decryptAESKey(encryptedKeyB64, wrappingKey) {
+
+    if (!wrappingKey) {
+        throw new Error("Wrapping key not loaded")
+    }
+
+    const combined = Uint8Array.from(
+        atob(encryptedKeyB64),
+        c => c.charCodeAt(0)
+    )
+
+    const iv = combined.slice(0, 12)
+    const ciphertext = combined.slice(12)
+
+    const rawCipherKey = await crypto.subtle.decrypt(
+        {
+            name: "AES-GCM",
+            iv
+        },
+        wrappingKey,
+        ciphertext
+    )
+
+  return rawCipherKey
 
 }
 
@@ -295,7 +318,7 @@ export async function decryptOsk(encryptedOsk, masterKey) {
   const ciphertextArray = combinedBuffer.slice(ivLength);
 
   // 4. Déchiffrer avec Web Crypto API (AES-GCM)
-  const decryptedBuffer = await crypto.subtle.decrypt(
+  const rawKey = await crypto.subtle.decrypt(
     {
       name: "AES-GCM",
       iv: iv
@@ -305,7 +328,16 @@ export async function decryptOsk(encryptedOsk, masterKey) {
   );
 
   // Retourne un ArrayBuffer (oskRaw d'origine)
-  return decryptedBuffer; 
+  return await crypto.subtle.importKey(
+      "raw",
+      rawKey,
+      {
+          name: "AES-GCM",
+          length: 256
+      },
+      false,
+      ["encrypt", "decrypt"]
+  ) 
 }
 
 export async function encryptOrganizationSecret(plaintext,osk) {
@@ -330,6 +362,33 @@ export async function encryptOrganizationSecret(plaintext,osk) {
 
     return [ciphertext, encryptedCipherKey]
 
+}
+
+export async function decryptOrganizationSecret(ciphertext, encryptedCipherKey, osk) {
+    // 1. Déchiffrer la clé du secret à l'aide de l'OSK (Clé de l'Organisation)
+    // On suppose que ta fonction "decryptAESKey" prend la clé chiffrée et la clé de chiffrement parente (osk)
+    const rawCipherKey = await decryptAESKey(
+        encryptedCipherKey,
+        osk
+    )
+
+    // 2. Importer la clé brute récupérée pour que Web Crypto puisse l'utiliser
+    const cipherKey = await crypto.subtle.importKey(
+        "raw",
+        rawCipherKey,
+        { name: "AES-GCM" }, // Ajuste l'algorithme ("AES-GCM" ou "AES-CBC") selon ce qu'utilise "generateAESKey"
+        true,
+        ["decrypt"]
+    )
+
+    // 3. Déchiffrer le secret avec la clé désormais en clair
+    // On suppose que ta fonction "decryptSecret" prend le texte chiffré et l'objet CryptoKey
+    const plaintext = await decryptSecret(
+        ciphertext,
+        cipherKey
+    )
+
+    return plaintext
 }
 
 export async function importOSK(oskRaw) {

@@ -395,3 +395,78 @@ button:hover {
   padding: 0;
   position: absolute;
 }
+
+/* ==========================================================================
+   ORGANIZATIONS AND INVITES (Nouveaux éléments)
+   ========================================================================== */
+
+/* Zone d'invitation (entre le contenu principal et les boutons d'actions) */
+.org-invite-zone {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  grid-column: 1 / -1; /* Prend toute la largeur si imbriqué dans une CSS Grid */
+}
+
+/* Input spécifique à l'invitation pour matcher le design global */
+.org-invite-zone input {
+  flex: 1;
+  padding: 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  outline: none;
+  font-size: 0.95rem;
+}
+
+.org-invite-zone input:focus {
+  border-color: var(--primary-color);
+}
+
+/* Bouton d'invitation stylisé comme les boutons secondaires */
+.org-invite-zone button {
+  width: auto;
+  padding: 0.6rem 1.2rem;
+  background-color: #2f3133;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-color);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.org-invite-zone button:hover {
+  background-color: #4a4a4a;
+}
+
+/* Surcharges spécifiques pour les actions et le bouton Supprimer */
+.secret-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+/* Bouton delete spécifique avec la couleur d'erreur du thème */
+.secret-actions button.delete-btn {
+  background-color: transparent;
+  color: var(--error-color);
+  border: 1px solid var(--error-color);
+  transition: all 0.2s ease;
+}
+
+.secret-actions button.delete-btn:hover {
+  background-color: var(--error-color);
+  color: #ffffff;
+}
+
+/* Message "Aucun secret" pour les organisations */
+.org-no-secrets {
+  margin-top: 1rem;
+  font-style: italic;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
