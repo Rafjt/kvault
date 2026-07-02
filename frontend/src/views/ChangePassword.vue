@@ -221,6 +221,7 @@ const onSubmit = async (e) => {
           <input
             v-model="currentPassword"
             :type="showCurrentPassword ? 'text' : 'password'"
+            autocomplete="current-password"
             required
           />
 
@@ -238,6 +239,7 @@ const onSubmit = async (e) => {
           <input
             v-model="newPassword"
             :type="showNewPassword ? 'text' : 'password'"
+            autocomplete="new-password"
             required
           />
 
@@ -285,6 +287,7 @@ const onSubmit = async (e) => {
           <input
             v-model="confirmPassword"
             :type="showConfirmPassword ? 'text' : 'password'"
+             autocomplete="new-password"
             required
           />
 
@@ -315,4 +318,9 @@ const onSubmit = async (e) => {
 
     <button @click="router.back()">Cancel</button>
   </div>
+<style scoped>
+.change-password-page .field {
+  margin-bottom: 0;
+}
+</style>
 </template>
