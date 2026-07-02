@@ -120,7 +120,6 @@ const onSubmit = async (e) => {
   }
 };
 </script>
-
 <template>
   <div>
     <h2>Login</h2>
@@ -134,21 +133,28 @@ const onSubmit = async (e) => {
     </div>
 
     <form @submit="onSubmit">
-      <div>
+
+      <div class="form-field">
         <label>Email</label>
         <input v-model="email" type="email" required />
       </div>
 
-      <div>
+      <div class="form-field">
         <label>Password</label>
+
         <div class="input-wrapper">
           <input
             v-model="password"
-            :type="password ? 'text' : 'password'"
+            :type="showCurrentPassword ? 'text' : 'password'"
+            autocomplete="current-password"
             required
           />
 
-          <input type="checkbox" v-model="showCurrentPassword" class="toggle" />
+          <input
+            type="checkbox"
+            v-model="showCurrentPassword"
+            class="toggle"
+          />
         </div>
       </div>
 
@@ -161,6 +167,7 @@ const onSubmit = async (e) => {
       <button :disabled="loading">
         {{ loading ? "Logging in..." : "Login" }}
       </button>
+
     </form>
   </div>
 </template>

@@ -73,7 +73,7 @@ async function submitSecret() {
 <template>
   <div style="max-width: 480px; margin: auto">
     <button @click="back_home()">
-        ← Cancel
+      ← Cancel
     </button>
     <h2>Create a secret</h2>
 
@@ -82,8 +82,8 @@ async function submitSecret() {
     </div>
 
     <form @submit.prevent="submitSecret">
-      <!-- NAME -->
-      <div>
+
+      <div class="form-field">
         <label>Name</label>
         <input
           v-model="form.name"
@@ -93,8 +93,7 @@ async function submitSecret() {
         />
       </div>
 
-      <!-- TYPE -->
-      <div>
+      <div class="form-field">
         <label>Type</label>
         <select v-model="form.type">
           <option value="text">Text</option>
@@ -105,8 +104,7 @@ async function submitSecret() {
         </select>
       </div>
 
-      <!-- VALUE -->
-      <div>
+      <div class="form-field">
         <label>Value</label>
         <textarea
           v-model="form.value"

@@ -10,6 +10,9 @@ const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 
+const showPassword = ref(false)
+const showConfirmPassword = ref(false)
+
 const errorMessage = ref('')
 const successMessage = ref('')
 const loading = ref(false)
@@ -120,62 +123,58 @@ const onSubmit = async (e) => {
       {{ successMessage }}
     </div>
 
-    <form @submit="onSubmit">
+    <form class="register-form" @submit="onSubmit">
 
       <!-- EMAIL -->
-      <div>
+      <div class="field">
         <label>Email</label>
-        <input
-          v-model="email"
-          type="email"
-          required
-        />
+        <input v-model="email" type="email" required />
       </div>
 
       <!-- PASSWORD -->
-      <div>
+      <div class="field">
         <label>Password</label>
-        <input
-          v-model="password"
-          type="password"
-          required
-        />
 
-        <!-- PASSWORD RULES -->
+        <div class="input-wrapper">
+          <input
+            v-model="password"
+            :type="showPassword ? 'text' : 'password'"
+            required
+          />
+          <input type="checkbox" v-model="showPassword" class="toggle" />
+        </div>
+
         <div style="margin-top: 0.5rem; font-size: 0.9rem">
-
           <div :style="{ color: passwordRules.minLength ? '#16a34a' : '#b91c1c' }">
             ✓ Minimum 12 characters
           </div>
-
           <div :style="{ color: passwordRules.uppercase ? '#16a34a' : '#b91c1c' }">
             ✓ One uppercase letter
           </div>
-
           <div :style="{ color: passwordRules.lowercase ? '#16a34a' : '#b91c1c' }">
             ✓ One lowercase letter
           </div>
-
           <div :style="{ color: passwordRules.number ? '#16a34a' : '#b91c1c' }">
             ✓ One number
           </div>
-
           <div :style="{ color: passwordRules.special ? '#16a34a' : '#b91c1c' }">
             ✓ One special character
           </div>
-
         </div>
       </div>
 
       <!-- CONFIRM PASSWORD -->
-      <div>
+      <div class="field">
         <label>Confirm password</label>
 
-        <input
-          v-model="confirmPassword"
-          type="password"
-          required
-        />
+        <div class="input-wrapper">
+          <input
+            v-model="confirmPassword"
+            :type="showConfirmPassword ? 'text' : 'password'"
+            required
+          />
+          <input type="checkbox" v-model="showConfirmPassword" class="toggle" />
+        </div>
 
         <div
           v-if="confirmPassword"
@@ -184,11 +183,7 @@ const onSubmit = async (e) => {
             color: passwordsMatch ? '#16a34a' : '#b91c1c'
           }"
         >
-          {{
-            passwordsMatch
-              ? '✓ Passwords match'
-              : '✗ Passwords do not match'
-          }}
+          {{ passwordsMatch ? "✓ Passwords match" : "✗ Passwords do not match" }}
         </div>
       </div>
 
@@ -197,21 +192,17 @@ const onSubmit = async (e) => {
           Back to login
         </router-link>
       </p>
-
-      <button
-        :disabled="
-          loading ||
-          !isPasswordValid ||
-          !passwordsMatch
-        "
-      >
-        {{
-          loading
-            ? 'Registering...'
-            : 'Register'
-        }}
+      <button :disabled="loading || !isPasswordValid || !passwordsMatch">
+        {{ loading ? "Registering..." : "Register" }}
       </button>
 
     </form>
   </div>
+<style scoped>
+.register-form .field {
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+</style>
 </template>
