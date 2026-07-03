@@ -556,6 +556,95 @@ router.get("/org/:id/secrets", authMiddleware, async (req, res) => {
   }
 });
 
+router.get("/org/:orgid/secret/:secretid", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const { orgid, secretid } = req.params;
+
+  try {
+    // 1. Vérifier d'abord si l'utilisateur fait partie de l'organisation
+    // et récupérer sa protected_osk par la même occasion
+    const memberCheck = await sequelize.query(
+      `
+      SELECT protected_osk 
+      FROM org_members 
+      WHERE organization_id = :orgid AND user_id = :userId 
+      LIMIT 1;
+      `,
+      {
+        replacements: { orgid, userId },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    // Si aucune ligne n'est retournée, l'utilisateur n'est pas membre (ou l'org n'existe pas)
+    if (memberCheck.length === 0) {
+      return res.status(403).json({
+        message: "Access denied. You are not a member of this organization."
+      });
+    }
+
+    const protectedOskBase64 = Buffer.from(memberCheck[0].protected_osk).toString("base64");
+
+    // 2. Récupérer le secret spécifique lié à cette organisation
+    const secretRows = await sequelize.query(
+      `
+      SELECT 
+        os.id, 
+        os.organization_id,
+        o.name AS organization_name,
+        os.type, 
+        os.name, 
+        os.encrypted_cipher_key, 
+        os.ciphertext, 
+        os.created_at, 
+        os.updated_at
+      FROM organization_secrets os
+      INNER JOIN organizations o ON os.organization_id = o.id
+      WHERE os.id = :secretid AND os.organization_id = :orgid
+      LIMIT 1;
+      `,
+      {
+        replacements: { secretid, orgid },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    // Si le secret n'existe pas ou n'appartient pas à cette orga
+    if (secretRows.length === 0) {
+      return res.status(404).json({
+        message: "Secret not found in this organization."
+      });
+    }
+
+    const secret = secretRows[0];
+
+    // 3. Formatage des données binaires en Base64
+    const formattedSecret = {
+      id: secret.id,
+      organization_id: secret.organization_id,
+      organization_name: secret.organization_name,
+      type: secret.type,
+      name: secret.name,
+      encrypted_cipher_key: Buffer.from(secret.encrypted_cipher_key).toString("base64"),
+      ciphertext: Buffer.from(secret.ciphertext).toString("base64"),
+      created_at: secret.created_at,
+      updated_at: secret.updated_at
+    };
+
+    // Tout est OK : On renvoie la clé de l'orga et le secret ciblé
+    return res.status(200).json({
+      protected_osk: protectedOskBase64,
+      secret: formattedSecret
+    });
+
+  } catch (error) {
+    console.error("Fetch single organization secret error:", error);
+    return res.status(500).json({
+      message: "Internal server error"
+    });
+  }
+});
+
 router.post("/org/:organizationId/secrets", authMiddleware, async (req, res) => {
 
   const userId = req.user.id
@@ -789,4 +878,99 @@ router.delete("/org/secret/:secretId", authMiddleware, async (req, res) => {
   }
 });
 
+router.put("/org/:orgid/secret/:secretid", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const { orgid, secretid } = req.params;
+  const { name, type, ciphertext, encrypted_cipher_key } = req.body;
+
+  if (!name || !type || !ciphertext || !encrypted_cipher_key) {
+    return res.status(400).json({
+      message: "Missing required fields: name, type, ciphertext, or encrypted_cipher_key."
+    });
+  }
+
+  try {
+    const memberCheck = await sequelize.query(
+      `
+      SELECT role 
+      FROM org_members 
+      WHERE organization_id = :orgid AND user_id = :userId 
+      LIMIT 1;
+      `,
+      {
+        replacements: { orgid, userId },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    if (memberCheck.length === 0) {
+      return res.status(403).json({
+        message: "Access denied. You are not a member of this organization."
+      });
+    }
+
+    const userRole = memberCheck[0].role;
+    if (userRole !== "owner" && userRole !== "admin") {
+      return res.status(403).json({
+        message: "Access denied. Only organization owners and admins can update secrets."
+      });
+    }
+
+    const secretCheck = await sequelize.query(
+      `
+      SELECT id 
+      FROM organization_secrets 
+      WHERE id = :secretid AND organization_id = :orgid 
+      LIMIT 1;
+      `,
+      {
+        replacements: { secretid, orgid },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    if (secretCheck.length === 0) {
+      return res.status(404).json({
+        message: "Secret not found in this organization."
+      });
+    }
+
+    const ciphertextBuffer = Buffer.from(ciphertext, "base64");
+    const encryptedKeyBuffer = Buffer.from(encrypted_cipher_key, "base64");
+
+    await sequelize.query(
+      `
+      UPDATE organization_secrets
+      SET 
+        name = :name,
+        type = :type,
+        ciphertext = :ciphertextBuffer,
+        encrypted_cipher_key = :encryptedKeyBuffer,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = :secretid AND organization_id = :orgid;
+      `,
+      {
+        replacements: {
+          name,
+          type,
+          ciphertextBuffer,
+          encryptedKeyBuffer,
+          secretid,
+          orgid
+        },
+        type: QueryTypes.UPDATE
+      }
+    );
+
+    return res.status(200).json({
+      message: "Organization secret updated successfully."
+    });
+
+  } catch (error) {
+    console.error("Update organization secret error:", error);
+    return res.status(500).json({
+      message: "Internal server error"
+    });
+  }
+});
 module.exports = router;

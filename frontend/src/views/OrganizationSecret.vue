@@ -51,6 +51,8 @@ const fetchOrgSecrets = async () => {
 
     const osk = await importOSK(rawOosk)
 
+    cryptoStore.setOrganizationKey(props.orgId, osk)
+
     // Déchiffrement initial de l'ensemble des secrets reçus
     for (const s of fetchedSecrets) {
       showValues.value[s.id] = false
@@ -76,8 +78,8 @@ const toggleValue = (id) => {
   showValues.value[id] = !showValues.value[id]
 }
 
-const handleUpdateSecret = (secretId) => {
-  router.push(`/updateOrgSecret/${secretId}`)
+const handleUpdateSecret = (secretId, orgId) => {
+  router.push(`/updateOrgSecret/${orgId}/${secretId}`)
 }
 
 const deleteSecret = async (secretId, orgId) => {
@@ -203,7 +205,7 @@ onMounted(() => {
           <button @click="toggleValue(secret.id)">
             {{ showValues[secret.id] ? 'Hide' : 'Show' }}
           </button>
-          <button @click="handleUpdateSecret(secret.id)">
+          <button @click="handleUpdateSecret(secret.id, props.orgId)">
             Update
           </button>
           <button @click="deleteSecret(secret.id, props.orgId)">
