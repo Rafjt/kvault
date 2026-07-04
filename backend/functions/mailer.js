@@ -31,17 +31,16 @@ export const sendMail = async (to, subject, text, html) => {
   }
 };
 
-
 export const sendTokenMail = async (verificationToken, email) => {
   const verificationLink = `http://kvault.local/auth/verify-email?token=${verificationToken}`;
 
   const html = `
   <!DOCTYPE html>
-  <html lang="fr">
+  <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vérification Email</title>
+    <title>Email Verification</title>
   </head>
   <body style="margin:0; padding:0; background-color:#f4f7fb; font-family:Arial, sans-serif;">
     <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f7fb; padding:40px 20px;">
@@ -56,7 +55,7 @@ export const sendTokenMail = async (verificationToken, email) => {
                   KVault 🔐
                 </h1>
                 <p style="margin-top:10px; color:#dbeafe; font-size:16px;">
-                  Vérifie ton adresse email
+                  Verify your email address
                 </p>
               </td>
             </tr>
@@ -65,13 +64,13 @@ export const sendTokenMail = async (verificationToken, email) => {
             <tr>
               <td style="padding:40px;">
                 <h2 style="margin-top:0; color:#111827; font-size:24px;">
-                  Bienvenue 👋
+                  Welcome 👋
                 </h2>
 
                 <p style="color:#4b5563; font-size:16px; line-height:1.7;">
-                  Merci de t'être inscrit sur <strong>KVault</strong>.
-                  Pour activer ton compte et sécuriser ton accès,
-                  merci de confirmer ton adresse email.
+                  Thank you for registering with <strong>KVault</strong>.
+                  To activate your account and secure your access,
+                  please verify your email address.
                 </p>
 
                 <!-- Button -->
@@ -91,15 +90,15 @@ export const sendTokenMail = async (verificationToken, email) => {
                           font-weight:bold;
                         "
                       >
-                        Vérifier mon email
+                        Verify my email
                       </a>
                     </td>
                   </tr>
                 </table>
 
                 <p style="color:#6b7280; font-size:14px; line-height:1.6;">
-                  Si le bouton ne fonctionne pas, copie et colle ce lien
-                  dans ton navigateur :
+                  If the button doesn't work, copy and paste this link
+                  into your browser:
                 </p>
 
                 <p style="word-break:break-all;">
@@ -111,7 +110,7 @@ export const sendTokenMail = async (verificationToken, email) => {
                 <hr style="border:none; border-top:1px solid #e5e7eb; margin:30px 0;" />
 
                 <p style="color:#9ca3af; font-size:13px; text-align:center;">
-                  Si tu n’as pas créé de compte, tu peux ignorer cet email.
+                  If you did not create an account, you can safely ignore this email.
                 </p>
               </td>
             </tr>
@@ -120,7 +119,7 @@ export const sendTokenMail = async (verificationToken, email) => {
             <tr>
               <td style="background:#f9fafb; padding:20px; text-align:center;">
                 <p style="margin:0; color:#9ca3af; font-size:12px;">
-                  © ${new Date().getFullYear()} KVault — Tous droits réservés
+                  © ${new Date().getFullYear()} KVault — All rights reserved.
                 </p>
               </td>
             </tr>
@@ -135,8 +134,8 @@ export const sendTokenMail = async (verificationToken, email) => {
 
   await sendMail(
     email,
-    "🔐 Vérifie ton email - KVault",
-    `Vérifie ton email ici : ${verificationLink}`,
-    html
+    "🔐 Verify your email - KVault",
+    `Verify your email here : ${verificationLink}`,
+    html,
   );
 };
