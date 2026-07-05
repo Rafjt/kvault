@@ -2,7 +2,7 @@
 import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import { API_AUTH_URL } from "../components/constant.js";
-import { argon2id } from "hash-wasm";
+import {deriveKEK, importKEK, decryptMasterKey, encryptMasterKey} from "../function/crypto";
 
 const router = useRouter();
 
@@ -85,79 +85,58 @@ const onSubmit = async (e) => {
     // =========================
     // OLD KEK
     // =========================
-    const oldKekRaw = await argon2id({
-      password: currentPassword.value,
-      salt: kdfSalt,
-      parallelism: 1,
-      iterations: 3,
-      memorySize: 65536,
-      hashLength: 32,
-      outputType: "binary",
-    });
 
-    const oldKek = await crypto.subtle.importKey(
-      "raw",
-      oldKekRaw,
-      { name: "AES-GCM" },
-      false,
-      ["decrypt"]
-    );
+    const oldKekRaw = await deriveKEK(currentPassword.value, kdfSalt)
+    const oldKek = await importKEK(oldKekRaw, "decrypt")
 
     // =========================
     // DECRYPT MASTER KEY
     // =========================
-    const iv = encryptedMKFull.slice(0, 12);
-    const encryptedData = encryptedMKFull.slice(12);
 
-    let masterKeyBuffer;
+    const iv = encryptedMKFull.slice(0, 12)
+    const encryptedData = encryptedMKFull.slice(12)
+
+    let masterKey
 
     try {
-      masterKeyBuffer = await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv, tagLength: 128 },
+      masterKey = await decryptMasterKey(
+        iv,
         oldKek,
         encryptedData
-      );
-    } catch (err) {
-      throw new Error("Current password is incorrect");
+      )
+    } catch {
+      throw new Error("Current password is incorrect")
     }
-
-    const masterKey = new Uint8Array(masterKeyBuffer);
 
     console.log("Master key decrypted OK");
 
     // =========================
     // NEW KEK
     // =========================
+
+    //watch a partir d'ici
     const newKdfSalt = crypto.getRandomValues(new Uint8Array(16));
 
-    const newKekRaw = await argon2id({
-      password: newPassword.value,
-      salt: newKdfSalt,
-      parallelism: 1,
-      iterations: 3,
-      memorySize: 65536,
-      hashLength: 32,
-      outputType: "binary",
-    });
+    const newKekRaw = await deriveKEK(
+      newPassword.value,
+      newKdfSalt
+    )
 
-    const newKek = await crypto.subtle.importKey(
-      "raw",
+    const newKek = await importKEK(
       newKekRaw,
-      { name: "AES-GCM" },
-      false,
-      ["encrypt"]
-    );
+      "encrypt"
+    )
 
     // =========================
     // RE-ENCRYPT MASTER KEY
     // =========================
     const newIv = crypto.getRandomValues(new Uint8Array(12));
 
-    const newEncryptedMK = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: newIv },
+    const newEncryptedMK = await encryptMasterKey(
+      newIv,
       newKek,
       masterKey
-    );
+    )
 
     const finalEncryptedMK = new Uint8Array(
       newIv.length + newEncryptedMK.byteLength

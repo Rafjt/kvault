@@ -264,29 +264,6 @@ onMounted(async () => {
     </section>
 
     <!-- ===================== -->
-    <!-- ACCOUNT -->
-    <!-- ===================== -->
-    <section class="page-section">
-      <h2>Your account</h2>
-
-      <div class="secrets-controls">
-        <button
-          class="action-btn logout-btn"
-          @click="reloadPage"
-        >
-          Logout
-        </button>
-
-        <button
-          class="action-btn reset-btn"
-          @click="redirectToChangePassword"
-        >
-          Change password
-        </button>
-      </div>
-    </section>
-
-    <!-- ===================== -->
     <!-- SECRETS -->
     <!-- ===================== -->
     <section class="page-section">
@@ -391,6 +368,29 @@ onMounted(async () => {
         </li>
       </ul>
 
+    </section>
+
+    <!-- ===================== -->
+    <!-- ACCOUNT -->
+    <!-- ===================== -->
+    <section class="page-section">
+      <h2>Your account</h2>
+
+      <div class="secrets-controls">
+        <button
+          class="action-btn logout-btn"
+          @click="reloadPage"
+        >
+          Logout
+        </button>
+
+        <button
+          class="action-btn reset-btn"
+          @click="redirectToChangePassword"
+        >
+          Change password
+        </button>
+      </div>
     </section>
 
   </div>
