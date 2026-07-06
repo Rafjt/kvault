@@ -31,20 +31,26 @@ onMounted(async () => {
     loading.value = true
     const data = await fetchOrg(props.orgId)
     
+    console.log(data)
+
     // On déchiffre l'OSK
     const decryptedOsk = await decryptOsk(
         data.organization.protected_osk,
-        cryptoStore.masterKey
+        cryptoStore.rsaPrivateKey
     )
 
+    console.log("decrypted", decryptedOsk)
+
     const oskKey = await importOSK(decryptedOsk)
+
+    console.log(oskKey)
 
     // On la sauvegarde dans le store pour qu'elle soit accessible partout
     cryptoStore.setOrganizationKey(props.orgId, oskKey)
 
   } catch (err) {
-    console.error("Erreur lors du chargement de l'organisation:", err)
-    errorMessage.value = "Impossible de charger la clé de l'organisation."
+    console.error("Error during organization loading:", err)
+    errorMessage.value = "Enable to load organization key"
   } finally {
     loading.value = false
   }

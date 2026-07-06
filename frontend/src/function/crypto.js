@@ -258,88 +258,52 @@ export async function decryptSecret(encryptedData, masterKey) {
 //  ORGANIZATIONS AND ORG_SECRETS
 // ==============================
 
-export async function encryptOsk(oskRaw, masterKey) {
-  if (!masterKey) {
-    throw new Error("MasterKey not loaded");
+export async function encryptOsk(oskRaw, rsaPublicKeyObject) {
+  if (!rsaPublicKeyObject) {
+    throw new Error("RSA Public Key object not found. Is user logged in?");
   }
 
-  const iv = crypto.getRandomValues(new Uint8Array(12)); // 12 octets
-
+  // Chiffrement direct avec l'objet CryptoKey issu du store
   const ciphertextBuffer = await crypto.subtle.encrypt(
-    {
-      name: "AES-GCM",
-      iv
-    },
-    masterKey,
-    oskRaw
+    { name: "RSA-OAEP" },
+    rsaPublicKeyObject, 
+    oskRaw             
   );
 
-  const ciphertextArray = new Uint8Array(ciphertextBuffer);
-
-  const combinedBuffer = new Uint8Array(iv.length + ciphertextArray.length);
-  combinedBuffer.set(iv, 0);
-  combinedBuffer.set(ciphertextArray, iv.length);
-
-  return btoa(String.fromCharCode(...combinedBuffer));
+  return btoa(String.fromCharCode(...new Uint8Array(ciphertextBuffer)));
 }
 
-export async function decryptOsk(encryptedOsk, masterKey) {
-  if (!masterKey) {
-    throw new Error("MasterKey not loaded");
+export async function decryptOsk(encryptedOsk, rsaPrivateKeyObject) {
+  if (!rsaPrivateKeyObject) {
+    throw new Error("RSA Private Key missing");
   }
 
-  let combinedBuffer;
+  let encryptedBuffer;
 
-  // 1. Détection du format (Buffer de Sequelize, String Base64 ou Uint8Array)
+  // 1. Si Sequelize renvoie un objet Buffer { type: 'Buffer', data: [...] }
   if (encryptedOsk && encryptedOsk.type === 'Buffer' && Array.isArray(encryptedOsk.data)) {
-    // Si Sequelize renvoie l'objet binaire direct
-    combinedBuffer = new Uint8Array(encryptedOsk.data);
-  } else if (typeof encryptedOsk === 'string') {
-    // Si c'est une chaîne Base64 standard
-    const encryptedString = atob(encryptedOsk);
-    combinedBuffer = new Uint8Array(encryptedString.length);
-    for (let i = 0; i < encryptedString.length; i++) {
-      combinedBuffer[i] = encryptedString.charCodeAt(i);
-    }
-  } else if (encryptedOsk instanceof Uint8Array) {
-    combinedBuffer = encryptedOsk;
-  } else {
-    throw new Error("Unknown or invalid OSK format");
+    encryptedBuffer = new Uint8Array(encryptedOsk.data).buffer;
+  } 
+  // 2. Si c'est directement un tableau ou un Uint8Array
+  else if (encryptedOsk instanceof Uint8Array || Array.isArray(encryptedOsk)) {
+    encryptedBuffer = new Uint8Array(encryptedOsk).buffer;
+  }
+  // 3. Si c'est une chaîne Base64 (cas classique de secours)
+  else if (typeof encryptedOsk === 'string') {
+    encryptedBuffer = Uint8Array.from(atob(encryptedOsk), c => c.charCodeAt(0)).buffer;
+  } 
+  else {
+    throw new Error("Format de clé protégé (protected_osk) invalide ou inconnu.");
   }
 
-  // 2. Extraire l'IV (les 12 premiers octets)
-  const ivLength = 12;
-  if (combinedBuffer.length < ivLength) {
-    throw new Error("Invalid Data : lenght insufficient");
-  }
-  const iv = combinedBuffer.slice(0, ivLength);
-
-  // 3. Extraire le texte chiffré (le reste)
-  const ciphertextArray = combinedBuffer.slice(ivLength);
-
-  // 4. Déchiffrer avec Web Crypto API (AES-GCM)
-  const rawKey = await crypto.subtle.decrypt(
-    {
-      name: "AES-GCM",
-      iv: iv
-    },
-    masterKey,
-    ciphertextArray
+  // Déchiffrement RSA-OAEP natif
+  const oskBuffer = await crypto.subtle.decrypt(
+    { name: "RSA-OAEP" },
+    rsaPrivateKeyObject, 
+    encryptedBuffer
   );
 
-  return rawKey
-  
-  // Retourne un ArrayBuffer (oskRaw d'origine)
-  // return await crypto.subtle.importKey(
-  //     "raw",
-  //     rawKey,
-  //     {
-  //         name: "AES-GCM",
-  //         length: 256
-  //     },
-  //     false,
-  //     ["encrypt", "decrypt"]
-  // ) 
+  return new Uint8Array(oskBuffer); // Renvoie l'OSK brute
 }
 
 export async function encryptOrganizationSecret(plaintext,osk) {

@@ -9,8 +9,8 @@ import CreateOrg from '../views/CreateOrg.vue'
 import CreateOrgSecret from '../views/CreateOrgSecret.vue'
 import OrganizationSecret from '../views/OrganizationSecret.vue'
 import UpdateOrgSecret from '../views/UpdateOrgSecret.vue'
-
-
+import ManageInvite from '../views/ManageInvite.vue'
+import InviteConfirmation from '../views/InviteConfirmation.vue'
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -23,7 +23,9 @@ const routes = [
   { path: "/createOrg", name: "createOrg", component: CreateOrg, meta: { requiresAuth: true } },
   { path: '/createOrgSecret/:orgId', name: 'createOrgSecret',component: CreateOrgSecret, props: true, meta: { requiresAuth: true } },
   { path: '/org/:orgId', name: 'organizationSecret', component: OrganizationSecret, props: true, meta: { requiresAuth: true } },
-  { path: '/updateOrgSecret/:orgId/:secretId', name: 'updateOrgSecret', component: UpdateOrgSecret, props: true, meta: { requiresAuth: true } }, 
+  { path: '/updateOrgSecret/:orgId/:secretId', name: 'updateOrgSecret', component: UpdateOrgSecret, props: true, meta: { requiresAuth: true } },
+  { path: '/ManageInvite', name: 'manageInvite', component: ManageInvite, props: true, meta: { requiresAuth: true } },
+  { path: '/org/:orgId/confirmations', name: 'inviteConfirmation', component: InviteConfirmation, props: true, meta: { requiresAuth: true } }, 
   // Capture toutes les routes non trouvées et redirige
   { path: '/:catchAll(.*)', redirect: '/login' }
 ]

@@ -47,7 +47,7 @@ const fetchOrgSecrets = async () => {
 
     const fetchedSecrets = data.secrets || []
 
-    const rawOosk = await decryptOsk(data.protected_osk,cryptoStore.masterKey)
+    const rawOosk = await decryptOsk(data.protected_osk,cryptoStore.rsaPrivateKey)
 
     const osk = await importOSK(rawOosk)
 

@@ -403,7 +403,6 @@ button:hover {
 /* Zone d'invitation (entre le contenu principal et les boutons d'actions) */
 .org-invite-zone {
   margin-top: 1rem;
-  display: flex;
   gap: 0.5rem;
   align-items: center;
   grid-column: 1 / -1; /* Prend toute la largeur si imbriqué dans une CSS Grid */

@@ -109,7 +109,10 @@ const onSubmit = async (e) => {
     // IMPORT BI-CLÉ RSA
     // =========================
 
-    const { publicKey, privateKey } = await importRsaKeyPair(rsaPublicKeyRaw, decryptedPrivateKeyBuffer)
+    const rsaKeyPair = await importRsaKeyPair(rsaPublicKeyRaw, decryptedPrivateKeyBuffer)
+
+    const pubKey = rsaKeyPair.publicKeySpki
+    const privKey = rsaKeyPair.privateKeyPkcs8
 
     // =========================
     // IMPORT MASTER KEY
@@ -121,7 +124,7 @@ const onSubmit = async (e) => {
     // IMPORT RSA KEYPAIR
     // =========================
 
-    await cryptoStore.setRSAKeys(publicKey, privateKey)
+    await cryptoStore.setRSAKeys(pubKey, privKey)
 
     // =========================
     // CLEANUP

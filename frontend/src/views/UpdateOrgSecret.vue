@@ -112,7 +112,7 @@ onMounted(async () => {
 
     const rawOsk = await decryptOsk(
       data.protected_osk,
-      cryptoStore.masterKey
+      cryptoStore.rsaPrivateKey
     )
 
     osk.value = await importOSK(rawOsk)

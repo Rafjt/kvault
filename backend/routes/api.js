@@ -3,6 +3,7 @@ const router = express.Router();
 const sequelize = require("../database");
 const { QueryTypes } = require("sequelize");
 const { authMiddleware } = require("../middleware/auth.middleware.js");
+const crypto = require("crypto");
 
 /**
  * Route info
@@ -380,30 +381,26 @@ router.get("/org", authMiddleware, async (req, res) => {
   const userId = req.user.id
 
   try {
+    // 1. Récupérer les organisations dont l'utilisateur est déjà membre
     const organizations = await sequelize.query(
       `
       SELECT
         o.id,
         o.name,
         o.created_at,
-        om.role, -- Ajout du rôle de l'utilisateur dans l'organisation
+        om.role,
         COUNT(os.id) AS secret_count
       FROM organizations o
-
       INNER JOIN org_members om
         ON om.organization_id = o.id
-
       LEFT JOIN organization_secrets os
         ON os.organization_id = o.id
-
       WHERE om.user_id = :userId
-
       GROUP BY
         o.id,
         o.name,
         o.created_at,
-        om.role -- Requis dans le GROUP BY car om.role n'est pas une fonction d'agrégation
-
+        om.role
       ORDER BY o.name
       `,
       {
@@ -412,9 +409,40 @@ router.get("/org", authMiddleware, async (req, res) => {
       }
     )
 
-    console.log(organizations)
+    // 2. Récupérer les invitations EN ATTENTE reçues par cet utilisateur
+    // On fait une sous-requête pour lier le 'login' de l'utilisateur connecté
+    const invitations = await sequelize.query(
+      `
+      SELECT 
+        oi.id AS invitation_id,
+        oi.role AS invited_role,
+        oi.status,
+        oi.token,
+        oi.expires_at,
+        oi.created_at AS invited_at,
+        o.id AS organization_id,
+        o.name AS organization_name,
+        u.login AS sender_login
+      FROM organization_invitations oi
+      INNER JOIN organizations o 
+        ON oi.organization_id = o.id
+      INNER JOIN users u 
+        ON oi.invited_by = u.id
+      WHERE oi.login = (SELECT login FROM users WHERE id = :userId)
+        AND oi.status = 'pending'
+        AND oi.expires_at > NOW() -- Sécurité pour ne pas afficher les invitations expirées dans le temps
+      ORDER BY oi.created_at DESC;
+      `,
+      {
+        replacements: { userId },
+        type: QueryTypes.SELECT
+      }
+    )
+
+    // 3. Retourner les deux listes au front-end
     res.json({
-      organizations
+      organizations,
+      invitations
     })
 
   } catch (err) {
@@ -973,4 +1001,356 @@ router.put("/org/:orgid/secret/:secretid", authMiddleware, async (req, res) => {
     });
   }
 });
+
+/* ========================= INVITATIONS ========================= */
+
+
+// Créer une invitation 
+router.post("/org/:orgid/invite", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const { orgid } = req.params;
+  const { email, role } = req.body;
+
+  if (!email || !role) {
+    return res.status(400).json({ message: "Missing required fields: email or role." });
+  }
+
+  if (!["member", "admin"].includes(role)) {
+    return res.status(400).json({ message: "Invalid role. Must be 'member' or 'admin'." });
+  }
+
+  try {
+    // 1. Vérifier si l'expéditeur est admin ou owner de l'organisation
+    const senderCheck = await sequelize.query(
+      `SELECT role FROM org_members WHERE organization_id = :orgid AND user_id = :userId LIMIT 1;`,
+      { replacements: { orgid, userId }, type: QueryTypes.SELECT }
+    );
+
+    if (senderCheck.length === 0 || !["owner", "admin"].includes(senderCheck[0].role)) {
+      return res.status(403).json({ message: "Access denied. Only admins and owners can invite." });
+    }
+
+    // 2. Vérifier si l'utilisateur ciblé est DÉJÀ membre de l'organisation
+    const targetUser = await sequelize.query(
+      `SELECT id FROM users WHERE login = :email LIMIT 1;`,
+      { replacements: { email }, type: QueryTypes.SELECT }
+    );
+
+    if (targetUser.length > 0) {
+      const alreadyMember = await sequelize.query(
+        `SELECT 1 FROM org_members WHERE organization_id = :orgid AND user_id = :targetId LIMIT 1;`,
+        { replacements: { orgid, targetId: targetUser[0].id }, type: QueryTypes.SELECT }
+      );
+      if (alreadyMember.length > 0) {
+        return res.status(400).json({ message: "This user is already a member of this organization." });
+      }
+    }
+
+    // 3. Annuler les anciennes invitations en attente pour cet email dans cette orga
+    await sequelize.query(
+      `UPDATE organization_invitations SET status = 'expired' WHERE organization_id = :orgid AND login = :email AND status = 'pending';`,
+      { replacements: { orgid, email }, type: QueryTypes.UPDATE }
+    );
+
+    // 4. Créer la nouvelle invitation (expiration dans 48h)
+    const token = crypto.randomUUID();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 48);
+
+    await sequelize.query(
+      `INSERT INTO organization_invitations (organization_id, login, invited_by, role, status, token, expires_at)
+       VALUES (:orgid, :email, :userId, :role, 'pending', :token, :expiresAt);`,
+      { replacements: { orgid, email, userId, role, token, expiresAt }, type: QueryTypes.INSERT }
+    );
+
+    // TODO: Envoyer un email ici avec le lien contenant le token
+    // https://tonsite.com/invite/accept?token=${token}
+
+    return res.status(201).json({
+      message: "Invitation created successfully.",
+      token // Tu le renvoies si tu gères l'envoi de mail côté client ou pour tester
+    });
+
+  } catch (error) {
+    console.error("Create invitation error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+
+// Récupérer les infos des invitations des user
+router.get("/user/invitations", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const userEmail = req.user.email; // Récupéré de ton token d'authentification dans l'authMiddleware
+
+  try {
+    // On sélectionne toutes les invitations destinées à cet email
+    // On inclut le nom de l'organisation et le login de la personne qui a invité (pratique pour l'UI)
+    const invitations = await sequelize.query(
+      `
+      SELECT 
+        oi.id, 
+        oi.organization_id, 
+        o.name AS organization_name,
+        oi.login, 
+        oi.role, 
+        oi.status, 
+        oi.token,
+        oi.expires_at,
+        oi.created_at,
+        u.login AS invited_by_user
+      FROM organization_invitations oi
+      INNER JOIN organizations o ON oi.organization_id = o.id
+      INNER JOIN users u ON oi.invited_by = u.id
+      WHERE LOWER(oi.login) = LOWER(:userEmail)
+      ORDER BY oi.created_at DESC;
+      `,
+      {
+        replacements: { userEmail },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    // On renvoie la liste complète (qu'elle soit vide ou pleine)
+    return res.status(200).json({
+      invitations
+    });
+
+  } catch (error) {
+    console.error("Get user invitations error:", error);
+    return res.status(500).json({ 
+      message: "Internal server error" 
+    });
+  }
+});
+
+// Accepter l'invitation
+router.post("/invite/:token/accept", authMiddleware, async (req, res) => {
+  const { token } = req.params;
+  const userId = req.user.id;
+
+  try {
+    // 1. Récupérer et valider l'invitation
+    const invitationRows = await sequelize.query(
+      `SELECT * FROM organization_invitations WHERE token = :token LIMIT 1;`,
+      { replacements: { token }, type: QueryTypes.SELECT }
+    );
+
+    if (invitationRows.length === 0) {
+      return res.status(404).json({ message: "Invitation not found." });
+    }
+
+    const invite = invitationRows[0];
+
+    // 2. Sécurité : Vérifier le login associé à l'ID
+    const userCheck = await sequelize.query(
+      `SELECT 1 FROM users WHERE id = :userId AND login = :inviteLogin LIMIT 1;`,
+      { replacements: { userId, inviteLogin: invite.login }, type: QueryTypes.SELECT }
+    );
+
+    if (userCheck.length === 0) {
+      return res.status(403).json({ message: "This invitation was sent to a different account." });
+    }
+
+    if (invite.status !== "pending" || new Date() > new Date(invite.expires_at)) {
+      return res.status(400).json({ message: "Invitation expired or already processed." });
+    }
+
+    // 3. Mettre à jour uniquement le statut de l'invitation (L'utilisateur n'est pas encore membre !)
+    await sequelize.query(
+      `UPDATE organization_invitations SET status = 'accepted', updated_at = CURRENT_TIMESTAMP WHERE id = :id;`,
+      { replacements: { id: invite.id }, type: QueryTypes.UPDATE }
+    );
+
+    return res.status(200).json({ 
+      message: "Invitation accepted! Waiting for an administrator to transmit your security key.",
+      organization_id: invite.organization_id
+    });
+
+  } catch (error) {
+    console.error("Accept invitation error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+
+// Récupérer les invitations acceptées à confirmer
+router.get("/org/:orgid/invitations/pending-confirm", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const { orgid } = req.params;
+
+  try {
+    // 1. Vérifier que l'appelant est bien Admin ou Owner de l'organisation
+    const memberCheck = await sequelize.query(
+      `SELECT role FROM org_members WHERE organization_id = :orgid AND user_id = :userId LIMIT 1;`,
+      { replacements: { orgid, userId }, type: QueryTypes.SELECT }
+    );
+
+    if (memberCheck.length === 0 || !["owner", "admin"].includes(memberCheck[0].role)) {
+      return res.status(403).json({ 
+        message: "Access denied. Only organization owners and admins can view pending confirmations." 
+      });
+    }
+
+    // 2. Récupérer les invitations acceptées et les clés publiques des utilisateurs correspondants
+    const pendingConfirms = await sequelize.query(
+      `
+      SELECT 
+        oi.id AS invitation_id,
+        oi.login,
+        oi.role AS assigned_role,
+        u.id AS user_id,
+        u.login,
+        u.rsa_public_key
+      FROM organization_invitations oi
+      INNER JOIN users u ON LOWER(oi.login) = LOWER(u.login)
+      WHERE oi.organization_id = :orgid AND oi.status = 'accepted'
+      `,
+      { replacements: { orgid }, type: QueryTypes.SELECT }
+    );
+
+    // Formater la clé publique en chaîne de caractères (depuis le BLOB) pour le Front-end
+    const formattedList = pendingConfirms.map(row => ({
+      invitation_id: row.invitation_id,
+      user_id: row.user_id,
+      email: row.email,
+      login: row.login,
+      assigned_role: row.assigned_role,
+      rsa_public_key: row.rsa_public_key ? row.rsa_public_key.toString("base64") : null
+    }));
+
+    return res.status(200).json(formattedList);
+
+  } catch (error) {
+    console.error("Fetch pending confirmations error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// Confirmer et pousser l'OSK chiffrée
+router.put("/org/:orgid/invitations/:invitationid/confirm", authMiddleware, async (req, res) => {
+  const adminId = req.user.id;
+  const { orgid, invitationid } = req.params;
+  const { protected_osk } = req.body; 
+
+  if (!protected_osk) {
+    return res.status(400).json({ message: "Missing required field: protected_osk." });
+  }
+
+  try {
+    // 1. Vérifier les droits de l'admin
+    const adminCheck = await sequelize.query(
+      `SELECT role FROM org_members WHERE organization_id = :orgid AND user_id = :adminId LIMIT 1;`,
+      { replacements: { orgid, adminId }, type: QueryTypes.SELECT }
+    );
+
+    if (adminCheck.length === 0 || !["owner", "admin"].includes(adminCheck[0].role)) {
+      return res.status(403).json({ message: "Access denied. Action restricted to owners and admins." });
+    }
+
+    // 2. Récupérer l'invitation
+    const invitationRows = await sequelize.query(
+      `SELECT * FROM organization_invitations WHERE id = :invitationid AND organization_id = :orgid LIMIT 1;`,
+      { replacements: { invitationid, orgid }, type: QueryTypes.SELECT }
+    );
+
+    if (invitationRows.length === 0) {
+      return res.status(404).json({ message: "Invitation not found in this organization." });
+    }
+
+    const invitation = invitationRows[0];
+
+    if (invitation.status !== "accepted") {
+      return res.status(400).json({ message: "Cannot confirm this invitation. Status must be 'accepted'." });
+    }
+
+    // 3. Trouver le user_id correspondant au login de l'invitation
+    const userRows = await sequelize.query(
+      `SELECT id FROM users WHERE login = :login LIMIT 1;`,
+      { replacements: { login: invitation.login }, type: QueryTypes.SELECT }
+    );
+
+    if (userRows.length === 0) {
+      return res.status(404).json({ message: "The invited user no longer exists in the system." });
+    }
+
+    const targetUserId = userRows[0].id;
+    const oskBuffer = Buffer.from(protected_osk, "base64");
+
+    // 4. Transaction : Création du membre ET archivage de l'invitation
+    await sequelize.transaction(async (t) => {
+      
+      // INSERTION OFFICIELLE DU MEMBRE (Il apparaît enfin dans ses groupes !)
+      await sequelize.query(
+        `
+        INSERT INTO org_members (organization_id, user_id, role, protected_osk)
+        VALUES (:orgid, :targetUserId, :role, :oskBuffer);
+        `,
+        { 
+          replacements: { orgid, targetUserId, role: invitation.role, oskBuffer }, 
+          transaction: t, 
+          type: QueryTypes.INSERT 
+        }
+      );
+
+      // On clôture l'invitation avec un statut 'completed'
+      await sequelize.query(
+        `UPDATE organization_invitations SET status = 'completed' WHERE id = :invitationid;`,
+        { replacements: { invitationid }, transaction: t, type: QueryTypes.UPDATE }
+      );
+    });
+
+    return res.status(200).json({ 
+      message: "User membership confirmed successfully. The group will now appear on their dashboard." 
+    });
+
+  } catch (error) {
+    console.error("Confirm membership error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// Récupérer toutes les invitations en attente reçues par l'utilisateur connecté
+router.get("/org/invitations/pending", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    const pendingInvitations = await sequelize.query(
+      `
+      SELECT 
+        oi.id AS invitation_id,
+        oi.role AS invited_role,
+        oi.status,
+        oi.token,
+        oi.expires_at,
+        oi.created_at AS invited_at,
+        o.id AS organization_id,
+        o.name AS organization_name,
+        u.login AS sender_login
+      FROM organization_invitations oi
+      INNER JOIN organizations o 
+        ON oi.organization_id = o.id
+      INNER JOIN users u 
+        ON oi.invited_by = u.id
+      WHERE oi.login = (SELECT login FROM users WHERE id = :userId)
+        AND oi.status = 'pending'
+        AND oi.expires_at > NOW()
+      ORDER BY oi.created_at DESC;
+      `,
+      {
+        replacements: { userId },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    return res.json({
+      invitations: pendingInvitations
+    });
+
+  } catch (error) {
+    console.error("Fetch pending invitations error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 module.exports = router;

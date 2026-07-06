@@ -33,9 +33,11 @@ async function submitOrganization() {
 
   try {
 
+    console.log(cryptoStore.rsaPublicKey)
+
     const osk = crypto.getRandomValues(new Uint8Array(32))
 
-    const encryptedOskBlob = await encryptOsk(osk, cryptoStore.masterKey)
+    const encryptedOskBlob = await encryptOsk(osk, cryptoStore.rsaPublicKey)
 
     const res = await fetch(`${API_BASE_URL}/org/create`, {
       method: "POST",
