@@ -35,7 +35,6 @@ const passwordsMatch = computed(
   () => newPassword.value === confirmPassword.value,
 );
 
-
 const onSubmit = async (e) => {
   e.preventDefault();
 
@@ -74,12 +73,11 @@ const onSubmit = async (e) => {
 
     const encryptedMKFull = Uint8Array.from(
       atob(data.encrypted_master_key),
-      (c) => c.charCodeAt(0)
+      (c) => c.charCodeAt(0),
     );
 
-    const kdfSalt = Uint8Array.from(
-      atob(data.kdf_salt),
-      (c) => c.charCodeAt(0)
+    const kdfSalt = Uint8Array.from(atob(data.kdf_salt), (c) =>
+      c.charCodeAt(0),
     );
 
     // =========================
@@ -100,7 +98,7 @@ const onSubmit = async (e) => {
       oldKekRaw,
       { name: "AES-GCM" },
       false,
-      ["decrypt"]
+      ["decrypt"],
     );
 
     // =========================
@@ -115,7 +113,7 @@ const onSubmit = async (e) => {
       masterKeyBuffer = await crypto.subtle.decrypt(
         { name: "AES-GCM", iv, tagLength: 128 },
         oldKek,
-        encryptedData
+        encryptedData,
       );
     } catch (err) {
       throw new Error("Current password is incorrect");
@@ -145,7 +143,7 @@ const onSubmit = async (e) => {
       newKekRaw,
       { name: "AES-GCM" },
       false,
-      ["encrypt"]
+      ["encrypt"],
     );
 
     // =========================
@@ -156,11 +154,11 @@ const onSubmit = async (e) => {
     const newEncryptedMK = await crypto.subtle.encrypt(
       { name: "AES-GCM", iv: newIv },
       newKek,
-      masterKey
+      masterKey,
     );
 
     const finalEncryptedMK = new Uint8Array(
-      newIv.length + newEncryptedMK.byteLength
+      newIv.length + newEncryptedMK.byteLength,
     );
 
     finalEncryptedMK.set(newIv, 0);
@@ -186,10 +184,16 @@ const onSubmit = async (e) => {
       throw new Error(errData.message || "Password rotation failed");
     }
 
-    successMessage.value = "Password successfully updated.";
+    successMessage.value =
+      "Password successfully updated.\nYou will be redirected to the login page.";
+
     currentPassword.value = "";
     newPassword.value = "";
     confirmPassword.value = "";
+
+    setTimeout(() => {
+      router.push("/login");
+    }, 7000);
   } catch (err) {
     console.error("ROTATION ERROR:", err);
     errorMessage.value = err.message || "Unexpected error during rotation";
@@ -197,7 +201,6 @@ const onSubmit = async (e) => {
     loading.value = false;
   }
 };
-
 </script>
 
 <template>
@@ -208,7 +211,7 @@ const onSubmit = async (e) => {
       {{ errorMessage }}
     </div>
 
-    <div v-if="successMessage" style="color: #065f46">
+    <div v-if="successMessage" style="color: #065f46; white-space: pre-line">
       {{ successMessage }}
     </div>
 
@@ -287,7 +290,7 @@ const onSubmit = async (e) => {
           <input
             v-model="confirmPassword"
             :type="showConfirmPassword ? 'text' : 'password'"
-             autocomplete="new-password"
+            autocomplete="new-password"
             required
           />
 
@@ -318,9 +321,9 @@ const onSubmit = async (e) => {
 
     <button @click="router.back()">Cancel</button>
   </div>
-<style scoped>
-.change-password-page .field {
-  margin-bottom: 0;
-}
-</style>
+  <style scoped>
+    .change-password-page .field {
+      margin-bottom: 0;
+    }
+  </style>
 </template>
