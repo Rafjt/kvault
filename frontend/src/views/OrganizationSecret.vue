@@ -142,6 +142,12 @@ onMounted(() => {
       Here are all the shared secrets from the organizations you are part of.
     </p>
 
+    <div class="top-actions">
+      <button class="home-btn" @click="router.back()">
+        ← Back
+      </button>
+    </div>
+
     <!-- BARRE DE FILTRES SYNCHRONE -->
     <div class="secrets-controls">
       <div class="search-box">
