@@ -227,9 +227,13 @@ onMounted(async () => {
     <!-- ORGANIZATIONS         -->
     <!-- ===================== -->
     <section class="page-section">
-      <h2>Your Organizations</h2>
+      <div class="section-header-row">
+        <h2>Your Organizations</h2>
+        <button v-if="organizations.length > 0" class="create-btn-sm" @click="createOrg">
+          + Create Organization
+        </button>
+      </div>
 
-      <!-- Bannière de notification d'invitation (Reçues par l'utilisateur) -->
       <div v-if="invitations.length > 0" class="invitation-alert-banner">
         <div class="alert-content">
           <span>✉️ You have <strong>{{ invitations.length }}</strong> pending organization invitation(s).</span>
@@ -239,35 +243,53 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div v-if="organizations.length === 0">
+      <div v-if="organizations.length === 0" class="empty-state">
         <p>You are not a member of any organization.</p>
-        <button @click="createOrg">
+        <button class="create-btn-inline" @click="createOrg">
           + Create an organization
         </button>
       </div>
 
-      <div v-else>
+      <div v-else class="org-list">
         <div
           v-for="org in organizations"
           :key="org.id"
-          class="secret-card"
+          class="org-card"
         >
-          <div class="secret-main">
-            <div class="secret-name">
-              {{ org.name }}
+          <div class="org-header">
+            <div class="org-identity">
+              <div class="org-name">{{ org.name }}</div>
+              <div class="org-type">
+                {{ org.secret_count }} secret(s) — Role: <span class="role-badge">{{ org.role }}</span>
+              </div>
             </div>
             
-            <!-- AJOUT : Alerte d'action pour l'admin (Clés de sécurité en attente d'envoi) -->
+            <div class="org-actions">
+              <button class="action-btn-sec" @click="router.push(`/org/${org.id}`)">
+                Inspect
+              </button>
+              <button class="action-btn-sec" @click="router.push(`/createOrgSecret/${org.id}`)">
+                {{ org.secret_count === 0 ? '+ Create first secret' : '+ Add secret' }}
+              </button>
+              <button
+                v-if="org.role === 'owner' || org.role === 'admin'"
+                class="delete-btn-sec"
+                @click="handleDeleteOrg(org.id)"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+
+          <div class="org-body">
             <div 
               v-if="pendingConfirmationsCount[org.id] > 0" 
               class="pending-confirm-badge"
-              style="background-color: #fef3c7; color: #92400e; padding: 10px; border-radius: 6px; margin: 8px 0; border: 1px solid #fcd34d;"
             >
-              ⚠️ <strong>{{ pendingConfirmationsCount[org.id] }} user(s)</strong> accepted entry. You must transmit their security key to complete their access.
-              <button 
-                style="margin-left: 10px; background: #d97706; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;"
-                @click="router.push(`/org/${org.id}/confirmations`)"
-              >
+              <span class="badge-text">
+                ⚠️ <strong>{{ pendingConfirmationsCount[org.id] }} user(s)</strong> accepted entry. You must transmit their security key.
+              </span>
+              <button class="badge-btn" @click="router.push(`/org/${org.id}/confirmations`)">
                 Transmit Keys
               </button>
             </div>
@@ -276,46 +298,22 @@ onMounted(async () => {
               v-if="(org.role === 'owner' || org.role === 'admin') && inviteForms[org.id]"
               class="org-invite-zone"
             >
-              <input
-                v-model="inviteForms[org.id].email"
-                type="email"
-                placeholder="Email address"
-              />
-
-              <select v-model="inviteForms[org.id].role">
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-              </select>
-
-              <button @click="handleInviteMember(org.id)">
-                Invite
-              </button>
+              <div class="invite-label">Invite a new member:</div>
+              <div class="invite-form-row">
+                <input
+                  v-model="inviteForms[org.id].email"
+                  type="email"
+                  placeholder="Email address"
+                />
+                <select v-model="inviteForms[org.id].role">
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <button class="invite-submit-btn" @click="handleInviteMember(org.id)">
+                  Send Invite
+                </button>
+              </div>
             </div>
-
-            <div class="secret-type" style="color:#666">
-              {{ org.secret_count }} secret(s) — Role: <strong>{{ org.role }}</strong>
-            </div>
-          </div>
-
-          <div v-if="org.secret_count === 0">
-            No secret yet.
-          </div>
-
-          <div class="secret-actions">
-            <button @click="router.push(`/org/${org.id}`)">
-              Inspect
-            </button>
-
-            <button @click="router.push(`/createOrgSecret/${org.id}`)">
-              {{ org.secret_count === 0 ? '+ Create first secret' : '+ Add secret' }}
-            </button>
-
-            <button
-              v-if="org.role === 'owner' || org.role === 'admin'"
-              @click="handleDeleteOrg(org.id)"
-            >
-              Delete
-            </button>
           </div>
         </div>
       </div>
