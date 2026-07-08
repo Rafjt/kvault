@@ -200,10 +200,16 @@ const onSubmit = async (e) => {
       throw new Error(errData.message || "Password rotation failed");
     }
 
-    successMessage.value = "Password successfully updated.";
+    successMessage.value =
+      "Password successfully updated.\nYou will be redirected to the login page.";
+
     currentPassword.value = "";
     newPassword.value = "";
     confirmPassword.value = "";
+
+    setTimeout(() => {
+      router.push("/login");
+    }, 7000);
   } catch (err) {
     console.error("ROTATION ERROR:", err);
     errorMessage.value = err.message || "Unexpected error during rotation";
@@ -221,7 +227,7 @@ const onSubmit = async (e) => {
       {{ errorMessage }}
     </div>
 
-    <div v-if="successMessage" style="color: #065f46">
+    <div v-if="successMessage" style="color: #065f46; white-space: pre-line">
       {{ successMessage }}
     </div>
 
