@@ -82,13 +82,13 @@ const handleConfirmUser = async (user) => {
 
   try {
     if (!cryptoStore.masterKey) {
-      throw new Error("Votre clé maîtresse (MasterKey) n'est pas chargée. Veuillez vous reconnecter.")
+      throw new Error("MasterKey not loaded. Please reconnect.")
     }
     if (!organization.value?.protected_osk) {
-      throw new Error("L'OSK de l'organisation est introuvable sur le serveur.")
+      throw new Error("Cannot find OSK. Please reconnect.")
     }
     if (!user.rsa_public_key) {
-      throw new Error("La clé publique du destinataire est manquante.")
+      throw new Error("Cannot find users public key. Please reconnect.")
     }
 
     // 🔬 DÉBOGAGE : On regarde la structure exacte reçue pour l'OSK avant de l'envoyer à decryptOsk
@@ -168,56 +168,57 @@ onMounted(() => {
 <template>
   <div class="secrets-page">
     <section class="page-section">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+      <div class="section-header-row">
         <h2>Confirmations for {{ organization ? organization.name : 'Organization' }}</h2>
-        <button class="action-btn" @click="goBack">Back to Home</button>
+        <button class="action-btn-sec" @click="goBack">Back to Home</button>
       </div>
 
-      <p style="color: #666; margin-bottom: 20px;">
+      <p class="section-description">
         The users below have accepted your invitation. To finalize their membership, you must transmit their copy of the Organization Security Key (OSK), encrypted with their public key.
       </p>
 
-      <div v-if="loading">
+      <div v-if="loading" class="status-msg">
         Loading data...
       </div>
 
-      <div v-if="errorMessage" style="color:#b91c1c; margin-bottom: 15px;">
+      <div v-if="errorMessage" class="error-banner">
         {{ errorMessage }}
       </div>
 
-      <div v-if="!loading && pendingUsers.length === 0">
+      <div v-if="!loading && pendingUsers.length === 0" class="empty-state">
         <p>No pending confirmations found for this organization.</p>
+        <button class="action-btn-sec btn-inline" @click="goBack">Return home</button>
       </div>
 
-      <ul v-if="!loading && pendingUsers.length > 0" class="secrets-list">
-        <li 
+      <div v-if="!loading && pendingUsers.length > 0" class="user-confirm-list">
+        <div 
           v-for="user in pendingUsers" 
           :key="user.invitation_id" 
-          class="secret-card"
+          class="user-confirm-card"
         >
-          <div class="secret-main">
-            <div class="secret-name">
+          <div class="user-info">
+            <div class="user-login">
               {{ user.login }}
             </div>
-            <div class="secret-type" style="color: #666;">
-              Assigned Role: <strong>{{ user.assigned_role }}</strong>
+            <div class="user-role-meta">
+              Assigned Role: <span class="role-badge">{{ user.assigned_role }}</span>
             </div>
-            <div style="font-size: 11px; color: #999; margin-top: 5px; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 400px;">
-              Public Key Found: {{ user.rsa_public_key ? '✓ Present' : '✗ Missing' }}
+            <div class="user-crypto-status" :class="{ 'status-ok': user.rsa_public_key, 'status-error': !user.rsa_public_key }">
+              <span>Public Key Status:</span> {{ user.rsa_public_key ? '✓ Ready to encrypt' : '✗ Missing key' }}
             </div>
           </div>
 
-          <div class="secret-actions">
+          <div class="user-actions-zone">
             <button 
+              class="confirm-submit-btn"
               :disabled="processingId === user.invitation_id || !user.rsa_public_key || !organization?.protected_osk"
               @click="handleConfirmUser(user)"
-              style="background-color: #10b981; color: white; border: none;"
             >
               {{ processingId === user.invitation_id ? 'Encrypting & Sending...' : 'Confirm & Transmit Key' }}
             </button>
           </div>
-        </li>
-      </ul>
+        </div>
+      </div>
     </section>
   </div>
 </template>

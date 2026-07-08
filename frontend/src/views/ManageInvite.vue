@@ -99,7 +99,6 @@ onMounted(() => {
       <!-- Pas d'invitations -->
       <div v-if="!loading && invitations.length === 0" class="empty-state">
         <p>You have no pending invitations at the moment.</p>
-        <button class="action-btn" @click="goBack">Return to dashboard</button>
       </div>
 
       <!-- Liste des invitations -->
