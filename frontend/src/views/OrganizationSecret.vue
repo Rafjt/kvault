@@ -143,7 +143,7 @@ onMounted(() => {
     </p>
 
     <div class="top-actions">
-      <button class="home-btn" @click="router.back()">
+      <button class="home-btn" @click="router.push('/home')">
         ← Back
       </button>
     </div>
