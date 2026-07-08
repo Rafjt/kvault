@@ -1,46 +1,32 @@
 <script setup>
-// TODO: voir pk le déchiffrement marche pas
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed } from 'vue'
 import { API_BASE_URL } from "../components/constant.js";
 import { useCryptoStore } from "../stores/crypto.store";
-import { useRouter } from "vue-router";
-import { deleteSecret } from "../function/function";
+import { useRouter } from "vue-router"
+import { deleteSecret } from '../function/function'
+import { decryptSecret } from '../function/crypto.js';
 
-const router = useRouter();
-
+const router = useRouter()
 const cryptoStore = useCryptoStore();
 
-const secrets = ref([]);
-const loading = ref(false);
-const errorMessage = ref("");
-const showValues = ref({}); // toggle pour chaque secret
-const searchQuery = ref("");
-const selectedType = ref("all");
+const secrets = ref([])
+const loading = ref(false)
+const errorMessage = ref('')
+const showValues = ref({}) 
+const searchQuery = ref('')
+const selectedType = ref('all')
+const organizations = ref([])
+const showOrgValues = ref({})
+const invitations = ref([])
 
-// Déchiffre AES-GCM (ciphertext Base64) avec masterKey
-async function decryptSecret(ciphertextB64, nonceB64) {
-  const ciphertext = Uint8Array.from(atob(ciphertextB64), (c) =>
-    c.charCodeAt(0),
-  );
-  const iv = Uint8Array.from(atob(nonceB64), (c) => c.charCodeAt(0));
+// AJOUT : Stocke le nombre de validations d'accès en attente par organisation { [orgId]: count }
+const pendingConfirmationsCount = ref({})
 
-  if (!cryptoStore.masterKey) {
-    throw new Error("MasterKey not loaded");
-  } else {
-    console.log("Masterkey loaded");
-  }
+// Stockage de l'input d'invitation par organisation { [orgId]: 'email/user' }
+const inviteForms = ref({})
 
-  const decrypted = await crypto.subtle.decrypt(
-    {
-      name: "AES-GCM",
-      iv,
-      tagLength: 128, // AES-GCM standard
-    },
-    cryptoStore.masterKey, // maintenant c’est un CryptoKey
-    ciphertext,
-  );
-
-  return new TextDecoder().decode(decrypted);
+async function createOrg() {
+  router.push("/createOrg")
 }
 
 async function createsec() {
@@ -51,13 +37,72 @@ async function redirectToChangePassword() {
   router.push("/change-password");
 }
 
+// Fonction pour gérer l'invitation d'un membre
+async function handleInviteMember(orgId) {
+  const form = inviteForms.value[orgId]
+
+  if (!form.email.trim()) {
+    alert("Please enter an email address.")
+    return
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/org/${orgId}/invite`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        email: form.email,
+        role: form.role
+      })
+    })
+
+    const data = await res.json().catch(() => ({}))
+
+    if (!res.ok) {
+      throw new Error(data.message || "Failed to send invitation")
+    }
+
+    alert("Invitation sent successfully!")
+    form.email = ""
+    form.role = "member"
+
+  } catch (err) {
+    console.error(err)
+    alert(err.message)
+  }
+}
+
+async function handleDeleteOrg(orgId) {
+  if (!confirm("Are you sure you want to delete this organization? This will delete all its secrets.")) {
+    return
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/org/${orgId}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    })
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.message || "Failed to delete organization")
+    }
+
+    organizations.value = organizations.value.filter(o => o.id !== orgId)
+  } catch (err) {
+    console.error("Delete organization failed", err)
+    errorMessage.value = err.message || "Failed to delete organization"
+  }
+}
+
 async function handleDeleteSecret(secretId) {
   try {
-    await deleteSecret(secretId);
-
-    secrets.value = secrets.value.filter((s) => s.id !== secretId);
-
-    delete showValues.value[secretId];
+    await deleteSecret(secretId)
+    secrets.value = secrets.value.filter(s => s.id !== secretId)
+    delete showValues.value[secretId]
   } catch (err) {
     console.error("Delete failed", err);
     errorMessage.value = "Failed to delete secret";
@@ -66,6 +111,51 @@ async function handleDeleteSecret(secretId) {
 
 async function handleUpdateSecret(secretId) {
   router.push(`/update/${secretId}`);
+}
+
+// AJOUT : Vérifie s'il y a des clés à transmettre pour les admins
+const fetchPendingConfirmations = async (orgId) => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/org/${orgId}/invitations/pending-confirm`, {
+      credentials: "include"
+    })
+    if (res.ok) {
+      const data = await res.json()
+      pendingConfirmationsCount.value[orgId] = data.length || 0
+    }
+  } catch (err) {
+    console.error(`Failed to fetch pending confirmations for org ${orgId}:`, err)
+  }
+}
+
+const fetchOrganizations = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/org`, {
+      credentials: "include"
+    })
+
+    const data = await res.json()
+
+    if (res.ok) {
+      organizations.value = data.organizations || []
+      invitations.value = data.invitations || [] 
+
+      // Initialisation des formulaires d'invitation et check des confirmations requises
+      organizations.value.forEach(org => {
+        inviteForms.value[org.id] = {
+          email: "",
+          role: "member"
+        }
+
+        // Si l'utilisateur est admin/owner, on regarde s'il doit valider des arrivants
+        if (org.role === 'owner' || org.role === 'admin') {
+          fetchPendingConfirmations(org.id)
+        }
+      })
+    }
+  } catch (err) {
+    console.error(err)
+  }
 }
 
 const fetchSecrets = async () => {
@@ -78,19 +168,18 @@ const fetchSecrets = async () => {
       credentials: "include",
     });
 
-    const data = await res.json().catch(() => ({}));
+    const data = await res.json().catch(() => ({}))
 
     if (!res.ok) {
       errorMessage.value = data.message || "Failed to load secrets";
     } else {
       secrets.value = data.secrets || [];
 
-      // Initialiser le toggle et déchiffrer les secrets
       for (const s of secrets.value) {
-        //console.log("cipher length:", ciphertext.length)
-        showValues.value[s.id] = false;
+        showValues.value[s.id] = false
+
         try {
-          s.value = await decryptSecret(s.ciphertext, s.nonce);
+          s.value = await decryptSecret(s.ciphertext, cryptoStore.masterKey)
         } catch (e) {
           console.error("Decrypt error for secret", s.id, e);
           s.value = "ERROR";
@@ -104,20 +193,14 @@ const fetchSecrets = async () => {
   }
 };
 
-// Toggle show/hide
 const toggleValue = (id) => {
   showValues.value[id] = !showValues.value[id];
 };
 
 const filteredSecrets = computed(() => {
   return secrets.value.filter((s) => {
-    const matchType =
-      selectedType.value === "all" || s.type === selectedType.value;
-
-    const matchSearch = s.name
-      .toLowerCase()
-      .includes(searchQuery.value.toLowerCase());
-
+    const matchType = selectedType.value === "all" || s.type === selectedType.value;
+    const matchSearch = s.name.toLowerCase().includes(searchQuery.value.toLowerCase());
     return matchType && matchSearch;
   });
 });
@@ -125,56 +208,133 @@ const filteredSecrets = computed(() => {
 const reloadPage = () => location.reload();
 
 onMounted(async () => {
-  // Attendre que la masterKey soit prête
   if (!cryptoStore.masterKey) {
     console.warn("MasterKey not loaded yet");
     return;
   }
-  await fetchSecrets();
-});
+
+  await Promise.all([
+    fetchSecrets(),
+    fetchOrganizations()
+  ])
+})
 </script>
 
 <template>
   <div class="secrets-page">
+
     <!-- ===================== -->
-    <!-- ACCOUNT SECTION -->
+    <!-- ORGANIZATIONS         -->
     <!-- ===================== -->
     <section class="page-section">
-      <h2>Your account</h2>
-
-      <div class="secrets-controls">
-        <button class="action-btn logout-btn" @click="reloadPage">
-          Logout
+      <div class="section-header-row">
+        <h2>Your Organizations</h2>
+        <button v-if="organizations.length > 0" class="create-btn-sm" @click="createOrg">
+          + Create Organization
         </button>
+      </div>
 
-        <button
-          class="action-btn reset-btn"
-          @click="redirectToChangePassword()"
+      <div v-if="invitations.length > 0" class="invitation-alert-banner">
+        <div class="alert-content">
+          <span>✉️ You have <strong>{{ invitations.length }}</strong> pending organization invitation(s).</span>
+          <button class="alert-action-btn" @click="router.push('/manageInvite')">
+            Manage Invitations
+          </button>
+        </div>
+      </div>
+
+      <div v-if="organizations.length === 0" class="empty-state">
+        <p>You are not a member of any organization.</p>
+        <button class="create-btn-inline" @click="createOrg">
+          + Create an organization
+        </button>
+      </div>
+
+      <div v-else class="org-list">
+        <div
+          v-for="org in organizations"
+          :key="org.id"
+          class="org-card"
         >
-          Change password
-        </button>
+          <div class="org-header">
+            <div class="org-identity">
+              <div class="org-name">{{ org.name }}</div>
+              <div class="org-type">
+                {{ org.secret_count }} secret(s) — Role: <span class="role-badge">{{ org.role }}</span>
+              </div>
+            </div>
+            
+            <div class="org-actions">
+              <button class="action-btn-sec" @click="router.push(`/org/${org.id}`)">
+                Inspect
+              </button>
+              <button class="action-btn-sec" @click="router.push(`/createOrgSecret/${org.id}`)">
+                {{ org.secret_count === 0 ? '+ Create first secret' : '+ Add secret' }}
+              </button>
+              <button
+                v-if="org.role === 'owner' || org.role === 'admin'"
+                class="delete-btn-sec"
+                @click="handleDeleteOrg(org.id)"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+
+          <div class="org-body">
+            <div 
+              v-if="pendingConfirmationsCount[org.id] > 0" 
+              class="pending-confirm-badge"
+            >
+              <span class="badge-text">
+                ⚠️ <strong>{{ pendingConfirmationsCount[org.id] }} user(s)</strong> accepted entry. You must transmit their security key.
+              </span>
+              <button class="badge-btn" @click="router.push(`/org/${org.id}/confirmations`)">
+                Transmit Keys
+              </button>
+            </div>
+
+            <div
+              v-if="(org.role === 'owner' || org.role === 'admin') && inviteForms[org.id]"
+              class="org-invite-zone"
+            >
+              <div class="invite-label">Invite a new member:</div>
+              <div class="invite-form-row">
+                <input
+                  v-model="inviteForms[org.id].email"
+                  type="email"
+                  placeholder="Email address"
+                />
+                <select v-model="inviteForms[org.id].role">
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <button class="invite-submit-btn" @click="handleInviteMember(org.id)">
+                  Send Invite
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
     <!-- ===================== -->
-    <!-- SECRETS SECTION -->
+    <!-- SECRETS               -->
     <!-- ===================== -->
     <section class="page-section">
-      <h2>Your secrets</h2>
+      <h2>Your Secrets</h2>
 
-      <button class="create-btn" @click="createsec">+ Create secret</button>
+      <button class="create-btn" @click="createsec">
+        + Create secret
+      </button>
 
       <div v-if="loading">Loading secrets...</div>
 
-      <div v-if="errorMessage" style="color: #b91c1c">
+      <div v-if="errorMessage" style="color:#b91c1c">
         {{ errorMessage }}
       </div>
 
-      <div v-if="!loading && filteredSecrets.length === 0">
-        <p>No matching secrets found.</p>
-      </div>
-
-      <!-- KEEP YOUR EXISTING CONTROLS -->
       <div class="secrets-controls">
         <div class="search-box">
           <input v-model="searchQuery" placeholder="Search by name..." />
@@ -192,39 +352,47 @@ onMounted(async () => {
         </div>
       </div>
 
-      <ul v-if="secrets.length > 0" class="secrets-list">
-        <li
-          v-for="secret in filteredSecrets"
-          :key="secret.id"
-          class="secret-card"
-        >
+      <div v-if="!loading && filteredSecrets.length === 0">
+        <p>No matching secrets found.</p>
+      </div>
+
+      <ul v-if="filteredSecrets.length > 0" class="secrets-list">
+        <li v-for="secret in filteredSecrets" :key="secret.id" class="secret-card">
           <div class="secret-main">
             <div class="secret-name">{{ secret.name }}</div>
             <div class="secret-type">{{ secret.type }}</div>
           </div>
 
           <div class="secret-meta">
-            <div>
-              Created: {{ new Date(secret.created_at).toLocaleDateString() }}
-            </div>
-            <div>
-              Updated: {{ new Date(secret.updated_at).toLocaleDateString() }}
-            </div>
+            <div>Created: {{ new Date(secret.created_at).toLocaleDateString() }}</div>
+            <div>Updated: {{ new Date(secret.updated_at).toLocaleDateString() }}</div>
           </div>
 
           <div class="secret-value">
-            {{ showValues[secret.id] ? secret.value : "************" }}
+            {{ showValues[secret.id] ? secret.value : '************' }}
           </div>
 
           <div class="secret-actions">
             <button @click="toggleValue(secret.id)">
-              {{ showValues[secret.id] ? "Hide" : "Show" }}
+              {{ showValues[secret.id] ? 'Hide' : 'Show' }}
             </button>
             <button @click="handleUpdateSecret(secret.id)">Update</button>
-            <button @click="handleDeleteSecret(secret.id)">delete</button>
+            <button @click="handleDeleteSecret(secret.id)">Delete</button>
           </div>
         </li>
       </ul>
     </section>
+
+    <!-- ===================== -->
+    <!-- ACCOUNT               -->
+    <!-- ===================== -->
+    <section class="page-section">
+      <h2>Your account</h2>
+      <div class="secrets-controls">
+        <button class="action-btn logout-btn" @click="reloadPage">Logout</button>
+        <button class="action-btn reset-btn" @click="redirectToChangePassword">Change password</button>
+      </div>
+    </section>
+
   </div>
 </template>

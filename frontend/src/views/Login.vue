@@ -1,9 +1,9 @@
 <script setup>
-import { ref } from "vue";
-import { useRouter } from "vue-router";
-import { useCryptoStore } from "../stores/crypto.store";
-import { API_AUTH_URL } from "../components/constant.js";
-import { argon2id } from "hash-wasm";
+import { ref } from "vue"
+import { useRouter } from "vue-router"
+import { useCryptoStore } from "../stores/crypto.store"
+import { API_AUTH_URL } from "../components/constant.js"
+import { importKEK, deriveKEK, decryptMasterKey, importRsaKeyPair, decryptPrivateKey } from "../function/crypto.js"
 
 const router = useRouter();
 const cryptoStore = useCryptoStore();
@@ -17,15 +17,20 @@ const errorMessage = ref("");
 const successMessage = ref("");
 
 const onSubmit = async (e) => {
-  e.preventDefault();
-  errorMessage.value = "";
-  successMessage.value = "";
-  loading.value = true;
+
+  e.preventDefault()
+
+  errorMessage.value = ""
+  successMessage.value = ""
+  loading.value = true
 
   try {
+
     const res = await fetch(`${API_AUTH_URL}/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json"
+      },
       credentials: "include",
       body: JSON.stringify({
         email: email.value,
@@ -43,14 +48,19 @@ const onSubmit = async (e) => {
     successMessage.value = data.message || "Login successful";
 
     // =========================
-    // 🔐 CRYPTO — MASTER KEY
+    // 🔐 CRYPTO — KEY MANAGEMENT
     // =========================
 
-    if (!data.crypto?.encrypted_master_key || !data.crypto?.kdf_salt) {
-      throw new Error("Missing crypto payload from backend");
+
+    if (
+      !data.crypto?.encrypted_master_key ||
+      !data.crypto?.kdf_salt ||
+      !data.crypto?.rsa_public_key ||
+      !data.crypto?.encrypted_rsa_private_key
+    ) {
+      throw new Error("Missing crypto payload from backend")
     }
 
-    // Base64 → Uint8Array
     const encryptedMKFull = Uint8Array.from(
       atob(data.crypto.encrypted_master_key),
       (c) => c.charCodeAt(0),
@@ -60,65 +70,84 @@ const onSubmit = async (e) => {
       c.charCodeAt(0),
     );
 
+    const rsaPublicKeyRaw = Uint8Array.from(
+      atob(data.crypto.rsa_public_key),
+      c => c.charCodeAt(0)
+    )
+
+    const encryptedPrivateKeyFull = Uint8Array.from(
+      atob(data.crypto.encrypted_rsa_private_key),
+      c => c.charCodeAt(0)
+    )
+
     // =========================
     // ARGON2 → KEK
     // =========================
 
-    const kekRaw = await argon2id({
-      password: password.value,
-      salt: kdfSalt,
-      parallelism: 1,
-      iterations: 3,
-      memorySize: 65536,
-      hashLength: 32,
-      outputType: "binary",
-    });
+    const kekRaw = await deriveKEK(password.value,kdfSalt)
 
-    const kek = await crypto.subtle.importKey(
-      "raw",
-      kekRaw,
-      { name: "AES-GCM" },
-      false,
-      ["decrypt"],
-    );
-
-    console.log(kek);
+    const kek = await importKEK(kekRaw,"decrypt")
 
     // =========================
     // AES-GCM — DECHIFFRE MK
     // =========================
-    // 1. Les 12 premiers octets pour l'IV
-    const iv = encryptedMKFull.slice(0, 12);
 
-    // 2. TOUT le reste (le ciphertext ET le tag d'authentification combinés)
-    const encryptedDataWithoutIv = encryptedMKFull.slice(12);
-
-    const decryptedMKBuffer = await crypto.subtle.decrypt(
-      {
-        name: "AES-GCM",
-        iv: iv,
-        tagLength: 128, // Optionnel (128 bits / 16 octets est la valeur par défaut)
-      },
-      kek,
-      encryptedDataWithoutIv, // On passe le bloc complet
-    );
+    const mkIv = encryptedMKFull.slice(0, 12)
+    const encryptedMK = encryptedMKFull.slice(12)
+    const decryptedMKBuffer = await decryptMasterKey(mkIv, kek, encryptedMK)
 
     // =========================
-    // Import Master Key (AES-GCM)
+    // AES-GCM — DECHIFFRE PK
     // =========================
-    await cryptoStore.setMasterKey(decryptedMKBuffer);
 
-    // 🔐 On ne garde JAMAIS le mot de passe
-    password.value = "";
+    const privateKeyIv = encryptedPrivateKeyFull.slice(0, 12)
+    const encryptedPrivateKey = encryptedPrivateKeyFull.slice(12)
+
+    const decryptedPrivateKeyBuffer = await decryptPrivateKey(privateKeyIv, kek, encryptedPrivateKey)
+
+    // =========================
+    // IMPORT BI-CLÉ RSA
+    // =========================
+
+    const rsaKeyPair = await importRsaKeyPair(rsaPublicKeyRaw, decryptedPrivateKeyBuffer)
+
+    const pubKey = rsaKeyPair.publicKeySpki
+    const privKey = rsaKeyPair.privateKeyPkcs8
+
+    // =========================
+    // IMPORT MASTER KEY
+    // =========================
+
+    await cryptoStore.setMasterKey(decryptedMKBuffer)
+
+    // =========================
+    // IMPORT RSA KEYPAIR
+    // =========================
+
+    await cryptoStore.setRSAKeys(pubKey, privKey)
+
+    // =========================
+    // CLEANUP
+    // =========================
+
+    password.value = ""
+
+    router.push("/home")
 
     router.push("/home");
   } catch (err) {
-    console.error("LOGIN CRYPTO ERROR:", err);
-    errorMessage.value = "Authentication or crypto error";
+
+    console.error("LOGIN CRYPTO ERROR:", err)
+
+    errorMessage.value = "Authentication or crypto error"
+
   } finally {
-    loading.value = false;
+
+    loading.value = false
+
   }
-};
+
+}
 </script>
 <template>
   <div>

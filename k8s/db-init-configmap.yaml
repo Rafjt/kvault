@@ -16,6 +16,12 @@ data:
         -- Master key chiffrée avec la KEK
         encrypted_master_key VARBINARY(255) NOT NULL,
 
+        -- Clé publique utilisée pour les groupes stockée en claire
+        rsa_public_key BLOB NOT NULL,
+
+        -- Clé privé utilisée pour les groupes stockée chifrée via la Master key
+        encrypted_rsa_private_key BLOB NOT NULL,
+
         -- Statut de vérification
         is_verified BOOLEAN NOT NULL DEFAULT FALSE,
 
@@ -28,6 +34,77 @@ data:
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB;
 
+    CREATE TABLE organizations (
+
+        id INT AUTO_INCREMENT PRIMARY KEY,
+
+        name VARCHAR(255) NOT NULL,
+
+        created_by INT NOT NULL,
+
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+        FOREIGN KEY(created_by)
+            REFERENCES users(id)
+            ON DELETE CASCADE
+    );
+
+    CREATE TABLE org_members (
+
+        organization_id INT NOT NULL,
+
+        user_id INT NOT NULL,
+
+        role ENUM(
+            'owner',
+            'admin',
+            'member'
+        ) DEFAULT 'member',
+
+        protected_osk VARBINARY(1024) NOT NULL,
+
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+        PRIMARY KEY(
+            organization_id,
+            user_id
+        ),
+
+        CONSTRAINT fk_org_member_org
+            FOREIGN KEY (organization_id)
+            REFERENCES organizations(id)
+            ON DELETE CASCADE,
+
+        CONSTRAINT fk_org_member_user
+            FOREIGN KEY (user_id)
+            REFERENCES users(id)
+            ON DELETE CASCADE
+    );
+
+    CREATE TABLE organization_secrets (
+
+        id INT AUTO_INCREMENT PRIMARY KEY,
+
+        organization_id INT NOT NULL,
+
+        type VARCHAR(50) NOT NULL,
+
+        name VARCHAR(200) NOT NULL,
+
+        encrypted_cipher_key VARBINARY(1024) NOT NULL,
+
+        ciphertext VARBINARY(8192) NOT NULL,
+
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ON UPDATE CURRENT_TIMESTAMP,
+
+        FOREIGN KEY (organization_id)
+            REFERENCES organizations(id)
+            ON DELETE CASCADE
+    );
+
     CREATE TABLE secrets (
         id INT AUTO_INCREMENT PRIMARY KEY,
         owner_id INT NOT NULL,
@@ -36,7 +113,6 @@ data:
         name VARCHAR(200) NOT NULL,
 
         ciphertext VARBINARY(4096) NOT NULL,
-        nonce VARBINARY(32) NOT NULL,
 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -58,6 +134,34 @@ data:
 
         CONSTRAINT fk_tokens_user
             FOREIGN KEY (user_id)
+            REFERENCES users(id)
+            ON DELETE CASCADE
+    ) ENGINE=InnoDB;
+
+    CREATE TABLE organization_invitations (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        organization_id INT NOT NULL,
+        invited_by INT NOT NULL,
+        login VARCHAR(255) NOT NULL,
+        
+        role ENUM('admin', 'member') DEFAULT 'member',
+        status ENUM('pending', 'accepted', 'declined', 'expired', 'completed') DEFAULT 'pending',
+        
+        -- UUID v4 fait 36 caractères (ou CHAR(64) si tu préfères un token de hashage)
+        token CHAR(36) NOT NULL UNIQUE, 
+        
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+        -- Contraintes de clés étrangères (Clonage des comportements de ta DB)
+        CONSTRAINT fk_invitation_org
+            FOREIGN KEY (organization_id)
+            REFERENCES organizations(id)
+            ON DELETE CASCADE,
+
+        CONSTRAINT fk_invitation_sender
+            FOREIGN KEY (invited_by)
             REFERENCES users(id)
             ON DELETE CASCADE
     ) ENGINE=InnoDB;

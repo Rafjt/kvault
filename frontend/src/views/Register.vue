@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { API_AUTH_URL } from "../components/constant.js";
-import { argon2id } from 'hash-wasm'
+import { importKEK, deriveKEK, encryptMasterKey, generateRSAKeyPair, exportRsaKeyPair, encryptPrivateKey } from '../function/crypto.js';
 
 const router = useRouter()
 
@@ -55,33 +55,44 @@ const onSubmit = async (e) => {
     const masterKey = crypto.getRandomValues(new Uint8Array(32))
     const kdfSalt = crypto.getRandomValues(new Uint8Array(16))
     const iv = crypto.getRandomValues(new Uint8Array(12))
+    const privateKeyIv = crypto.getRandomValues(new Uint8Array(12))
 
     // 2. Dérivation de la KEK
-    const kekRaw = await argon2id({
-      password: password.value,
-      salt: kdfSalt,
-      parallelism: 1,
-      iterations: 3,
-      memorySize: 65536,
-      hashLength: 32,
-      outputType: 'binary'
-    })
 
-    const kek = await crypto.subtle.importKey(
-      "raw", kekRaw, { name: "AES-GCM" }, false, ["encrypt"]
-    )
+    const kekRaw = await deriveKEK(password.value,kdfSalt)
+
+    const kek = await importKEK(kekRaw,"encrypt")
 
     // 3. Chiffrement de la Master Key
-    const encryptedMK = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv }, kek, masterKey
-    )
+    const encryptedMK = await encryptMasterKey( iv, kek, masterKey)
 
     // 4. Assemblage : IV + CIPHERTEXT
     const encryptedMasterKey = new Uint8Array(iv.length + encryptedMK.byteLength)
     encryptedMasterKey.set(iv, 0)
     encryptedMasterKey.set(new Uint8Array(encryptedMK), iv.length)
 
-    // 5. Envoi au serveur (L'encodage est délégué proprement ici sans polluer les variables)
+    // 5. Génération de la bi-clé RSA
+    const rsaKeyPair = await generateRSAKeyPair()
+
+    // 6. Exports des clées
+    const { publicKeySpki, privateKeyPkcs8 } = await exportRsaKeyPair(rsaKeyPair)
+
+    // 7. Chiffrement de la clé privée 
+    const encryptedPrivateKey = await encryptPrivateKey(privateKeyIv, kek, privateKeyPkcs8)
+
+    // 8. Concaténation IV + Ciphertext (partie privé)
+    const encryptedPrivateKeyBlob = new Uint8Array(
+      privateKeyIv.length + encryptedPrivateKey.byteLength
+    )
+
+    encryptedPrivateKeyBlob.set(privateKeyIv, 0)
+
+    encryptedPrivateKeyBlob.set(
+      new Uint8Array(encryptedPrivateKey),
+      privateKeyIv.length
+    )
+
+    // . Envoi au serveur (L'encodage est délégué proprement ici sans polluer les variables)
     const res = await fetch(`${API_AUTH_URL}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -89,8 +100,12 @@ const onSubmit = async (e) => {
       body: JSON.stringify({
         email: email.value,
         password: password.value,
-        encMK: arrayBufferToBase64(encryptedMasterKey), // Nettoyé ✨
-        kdfSalt: arrayBufferToBase64(kdfSalt)           // Nettoyé ✨
+        encMK: arrayBufferToBase64(encryptedMasterKey),
+        kdfSalt: arrayBufferToBase64(kdfSalt),
+        
+        rsaPublicKey: arrayBufferToBase64(publicKeySpki),
+        encPrivateKey: arrayBufferToBase64(encryptedPrivateKeyBlob)
+
       })
     })
 

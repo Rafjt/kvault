@@ -25,3 +25,18 @@ export async function fetchSecret(secret_id) {
 
   return data
 }
+
+export async function fetchOrg(orgId) {
+  const res = await fetch(`${API_BASE_URL}/org/${orgId}`, {
+      method: "GET",
+      credentials: "include",
+    })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to fetch secret")
+  }
+
+  return data
+}

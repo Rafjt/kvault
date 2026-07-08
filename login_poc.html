@@ -1,0 +1,190 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .page {
+    min-height: 500px;
+    background: #121212;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 2rem 1rem;
+  }
+  .card {
+    background: #1e1e1e;
+    border-radius: 12px;
+    padding: 2.5rem 2rem;
+    width: 100%;
+    max-width: 350px;
+    box-shadow: 0 0 15px rgba(128, 0, 255, 0.3);
+  }
+  h1 { color: #9b59b6; font-size: 1.5rem; text-align: center; margin-bottom: 0.3rem; }
+  h2 { color: #fff; font-size: 1rem; font-weight: 400; text-align: center; margin-bottom: 1.8rem; }
+  .field { margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.3rem; }
+  label { font-size: 0.85rem; font-weight: 500; color: #ddd; }
+  .input-wrap { position: relative; }
+  .input-wrap i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 15px; color: #666; pointer-events: none; }
+  input {
+    width: 100%;
+    padding: 0.6rem 0.7rem 0.6rem 2.2rem;
+    background: #2c2c2c;
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 1rem;
+    font-family: inherit;
+    outline: none;
+    transition: 0.2s;
+  }
+  input:focus { border: 2px solid #9b59b6; }
+  .toggle-pw {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; color: #666; cursor: pointer; padding: 2px 4px;
+    width: auto; font-size: 15px; line-height: 1;
+  }
+  .toggle-pw:hover { color: #9b59b6; background: none; }
+  .btn {
+    width: 100%; padding: 0.8rem;
+    background: #9b59b6;
+    color: #fff; font-weight: bold;
+    border: none; border-radius: 6px;
+    cursor: pointer; font-size: 1rem;
+    font-family: inherit;
+    margin-top: 0.5rem;
+    transition: background 0.3s, transform 0.1s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn:hover { background: #8e44ad; }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { background: #5a3470; cursor: not-allowed; transform: none; }
+  .alert {
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.87rem;
+    margin-bottom: 1rem;
+    display: none;
+    align-items: center;
+    gap: 8px;
+  }
+  .alert.error { background: #ff4d4f; color: #fff; }
+  .alert.success { background: #6c5ce7; color: #fff; }
+  .alert.show { display: flex; }
+  .spinner {
+    width: 15px; height: 15px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .shake { animation: shake 0.35s ease; }
+  @keyframes shake {
+    0%,100%{transform:translateX(0)}
+    25%{transform:translateX(-6px)}
+    75%{transform:translateX(6px)}
+  }
+</style>
+
+<div class="page">
+  <div class="card" id="card">
+    <h1>Your App</h1>
+    <h2>Connexion</h2>
+
+    <div class="alert error" id="err">
+      <i class="ti ti-alert-circle" aria-hidden="true"></i>
+      <span id="err-text">Mot de passe invalide.</span>
+    </div>
+    <div class="alert success" id="succ">
+      <i class="ti ti-circle-check" aria-hidden="true"></i>
+      <span id="succ-text">Bienvenue !</span>
+    </div>
+
+    <div class="field">
+      <label for="username">Identifiant</label>
+      <div class="input-wrap">
+        <i class="ti ti-user" aria-hidden="true"></i>
+        <input type="text" id="username" placeholder="admin" autocomplete="username" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="password">Mot de passe</label>
+      <div class="input-wrap">
+        <i class="ti ti-lock" aria-hidden="true"></i>
+        <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" />
+        <button class="toggle-pw" id="toggle-pw" aria-label="Afficher le mot de passe" type="button">
+          <i class="ti ti-eye" id="eye-icon" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
+
+    <button class="btn" id="login-btn" type="button">
+      <div class="spinner" id="spinner"></div>
+      <span id="btn-label">Se connecter</span>
+    </button>
+  </div>
+</div>
+
+<script>
+  const VALID_USER = 'admin';
+  const VALID_PASS = 'admin123';
+
+  const btn = document.getElementById('login-btn');
+  const spinner = document.getElementById('spinner');
+  const btnLabel = document.getElementById('btn-label');
+  const errBox = document.getElementById('err');
+  const errText = document.getElementById('err-text');
+  const succBox = document.getElementById('succ');
+  const pwInput = document.getElementById('password');
+  const unInput = document.getElementById('username');
+  const card = document.getElementById('card');
+  const toggleBtn = document.getElementById('toggle-pw');
+  const eyeIcon = document.getElementById('eye-icon');
+
+  toggleBtn.addEventListener('click', () => {
+    const show = pwInput.type === 'password';
+    pwInput.type = show ? 'text' : 'password';
+    eyeIcon.className = show ? 'ti ti-eye-off' : 'ti ti-eye';
+  });
+
+  function showError(msg) {
+    succBox.classList.remove('show');
+    errText.textContent = msg;
+    errBox.classList.add('show');
+    card.classList.add('shake');
+    setTimeout(() => card.classList.remove('shake'), 400);
+  }
+
+  function doLogin() {
+    const user = unInput.value.trim();
+    const pass = pwInput.value;
+    errBox.classList.remove('show');
+    succBox.classList.remove('show');
+
+    if (!user || !pass) { showError('Veuillez remplir tous les champs.'); return; }
+
+    btn.disabled = true;
+    spinner.style.display = 'block';
+    btnLabel.textContent = 'Vérification...';
+
+    setTimeout(() => {
+      spinner.style.display = 'none';
+      if (user === VALID_USER && pass === VALID_PASS) {
+        document.getElementById('succ-text').textContent = `Bienvenue, ${user} !`;
+        succBox.classList.add('show');
+        btnLabel.textContent = 'Connecté';
+        btn.style.background = '#6c5ce7';
+      } else {
+        btn.disabled = false;
+        btnLabel.textContent = 'Se connecter';
+        showError('Identifiant ou mot de passe invalide.');
+        pwInput.value = '';
+        pwInput.focus();
+      }
+    }, 800);
+  }
+
+  btn.addEventListener('click', doLogin);
+  [unInput, pwInput].forEach(el => el.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); }));
+</script>

@@ -71,7 +71,7 @@ router.get('/me', authMiddleware, (req, res) => {
 /* ========================= REGISTER ========================= */
 
 router.post("/register", Limiter, async (req, res) => {
-  const { email, password, encMK, kdfSalt } = req.body;
+  const { email, password, encMK, kdfSalt,rsaPublicKey,encPrivateKey } = req.body;
   const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>_\-+=~`[\]\\;/]).{12,}$/
 
   if (!email || !password) {
@@ -87,6 +87,10 @@ router.post("/register", Limiter, async (req, res) => {
 
   if (!validator.isEmail(email)) {
     return res.status(400).json({ error: "Invalid email format." });
+  }
+
+  if (!rsaPublicKey || !encPrivateKey) {
+    return res.status(400).json({ error: "RSA Key-Pair required." });
   }
 
   try {
@@ -177,9 +181,9 @@ router.post("/register", Limiter, async (req, res) => {
     await sequelize.query(
       `
       INSERT INTO users
-        (login, hashed_master_password, kdf_salt, encrypted_master_key, is_verified, verification_token, token_expiry)
+        (login, hashed_master_password, kdf_salt, encrypted_master_key, verification_token, rsa_public_key, encrypted_rsa_private_key, is_verified, token_expiry)
       VALUES
-        (:email, :hashedPassword, :kdfSalt, :encMK, false, :verificationToken, DATE_ADD(NOW(), INTERVAL 30 MINUTE))
+        (:email, :hashedPassword, :kdfSalt, :encMK, :verificationToken, :rsaPublicKey, :encPrivateKey, false, DATE_ADD(NOW(), INTERVAL 30 MINUTE))
       `,
       {
         replacements: {
@@ -187,6 +191,10 @@ router.post("/register", Limiter, async (req, res) => {
           hashedPassword,
           kdfSalt: Buffer.from(kdfSalt, 'base64'),
           encMK: Buffer.from(encMK, 'base64'),
+
+          rsaPublicKey: Buffer.from(rsaPublicKey, "base64"),
+          encPrivateKey: Buffer.from(encPrivateKey, "base64"),
+
           verificationToken,
         },
         type: QueryTypes.INSERT,
@@ -221,9 +229,17 @@ router.post("/login", Limiter, async (req, res) => {
   try {
     // 1️⃣ Fetch user
     const users = await sequelize.query(
-      `
-      SELECT id, login, hashed_master_password, is_verified,
-             encrypted_master_key, kdf_salt, token_expiry
+  `
+      SELECT
+          id,
+          login,
+          hashed_master_password,
+          is_verified,
+          encrypted_master_key,
+          kdf_salt,
+          rsa_public_key,
+          encrypted_rsa_private_key,
+          token_expiry
       FROM users
       WHERE login = ?
       `,
@@ -317,10 +333,18 @@ router.post("/login", Limiter, async (req, res) => {
     return res.json({
       message: "Login successful",
       crypto: {
+        
         encrypted_master_key: Buffer.from(user.encrypted_master_key).toString(
           "base64"
         ),
+
         kdf_salt: Buffer.from(user.kdf_salt).toString("base64"),
+
+        rsa_public_key: Buffer.from(user.rsa_public_key).toString("base64"),
+
+        encrypted_rsa_private_key: Buffer.from(user.encrypted_rsa_private_key).toString("base64")
+
+
       },
     });
   } catch (error) {
@@ -445,20 +469,76 @@ router.get("/verify-email", async (req, res) => {
   }
 });
 
-/*========================== RESET PASSWORD ================== */
+/*========================== RESET PASSWORD ==================*/
 
 router.get("/crypto", authMiddleware, async (req, res) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
     const users = await sequelize.query(
       `
-      SELECT encrypted_master_key, kdf_salt
+      SELECT
+        encrypted_master_key,
+        encrypted_rsa_private_key,
+        kdf_salt
       FROM users
       WHERE id = ?
       `,
       {
         replacements: [req.user.id],
         type: QueryTypes.SELECT,
-      }
+      },
+    );
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const user = users[0];
+
+    return res.json({
+      encrypted_master_key: Buffer.from(user.encrypted_master_key).toString(
+        "base64",
+      ),
+      encrypted_private_key: Buffer.from(
+        user.encrypted_rsa_private_key,
+      ).toString("base64"),
+      kdf_salt: Buffer.from(user.kdf_salt).toString("base64"),
+    });
+  } catch (err) {
+    console.error("CRYPTO ROUTE ERROR:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+/*========================== ROTATE PASSWORD ==================*/
+
+router.post("/crypto/rotate-password", authMiddleware, async (req, res) => {
+  const { oldPassword, newPassword, encMK, encPrivateKey, kdfSalt } = req.body;
+
+  if (!oldPassword || !newPassword || !encMK || !encPrivateKey || !kdfSalt) {
+    return res.status(400).json({
+      message: "Missing required fields",
+    });
+  }
+
+  try {
+    // =========================
+    // Fetch user
+    // =========================
+
+    const users = await sequelize.query(
+      `
+      SELECT id, hashed_master_password
+      FROM users
+      WHERE id = ?
+      `,
+      {
+        replacements: [req.user.id],
+        type: QueryTypes.SELECT,
+      },
     );
 
     if (users.length === 0) {
@@ -469,63 +549,13 @@ router.get("/crypto", authMiddleware, async (req, res) => {
 
     const user = users[0];
 
-    return res.json({
-      encrypted_master_key: Buffer.from(
-        user.encrypted_master_key
-      ).toString("base64"),
-
-      kdf_salt: Buffer.from(
-        user.kdf_salt
-      ).toString("base64"),
-    });
-  } catch (err) {
-    console.error(err);
-
-    return res.status(500).json({
-      message: "Internal server error",
-    });
-  }
-});
-
-/* ========================= ROTATE PASSWORD ========================= */
-
-router.post("/crypto/rotate-password", authMiddleware, async (req, res) => {
-  const { oldPassword, newPassword, encMK, kdfSalt } = req.body;
-
-  if (!oldPassword || !newPassword || !encMK || !kdfSalt) {
-    return res.status(400).json({
-      message: "Missing required fields",
-    });
-  }
-
-  try {
     // =========================
-    // Fetch user
+    // Verify current password
     // =========================
-    const users = await sequelize.query(
-      `
-      SELECT id, hashed_master_password
-      FROM users
-      WHERE id = ?
-      `,
-      {
-        replacements: [req.user.id],
-        type: QueryTypes.SELECT,
-      }
-    );
 
-    if (users.length === 0) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const user = users[0];
-
-    // =========================
-    // Verify OLD password
-    // =========================
     const isMatch = await bcrypt.compare(
       oldPassword,
-      user.hashed_master_password
+      user.hashed_master_password,
     );
 
     if (!isMatch) {
@@ -535,19 +565,22 @@ router.post("/crypto/rotate-password", authMiddleware, async (req, res) => {
     }
 
     // =========================
-    // Hash NEW password (auth layer)
+    // Hash new password
     // =========================
+
     const newHashedPassword = await hashPassword(newPassword);
 
     // =========================
-    // Update crypto material
+    // Update user crypto material
     // =========================
+
     await sequelize.query(
       `
       UPDATE users
       SET
         hashed_master_password = :hashedPassword,
         encrypted_master_key = :encMK,
+        encrypted_rsa_private_key = :encPrivateKey,
         kdf_salt = :kdfSalt
       WHERE id = :id
       `,
@@ -556,16 +589,17 @@ router.post("/crypto/rotate-password", authMiddleware, async (req, res) => {
           id: user.id,
           hashedPassword: newHashedPassword,
           encMK: Buffer.from(encMK, "base64"),
+          encPrivateKey: Buffer.from(encPrivateKey, "base64"),
           kdfSalt: Buffer.from(kdfSalt, "base64"),
         },
         type: QueryTypes.UPDATE,
-      }
+      },
     );
 
     // =========================
-    // Optional: invalidate existing sessions
-    // (recommended but not required)
+    // Invalidate all sessions
     // =========================
+
     await sequelize.query(
       `
       DELETE FROM auth_tokens
@@ -574,7 +608,7 @@ router.post("/crypto/rotate-password", authMiddleware, async (req, res) => {
       {
         replacements: [user.id],
         type: QueryTypes.DELETE,
-      }
+      },
     );
 
     return res.json({

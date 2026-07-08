@@ -2,7 +2,14 @@
 import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import { API_AUTH_URL } from "../components/constant.js";
-import { argon2id } from "hash-wasm";
+import {
+  deriveKEK,
+  importKEK,
+  decryptMasterKey,
+  encryptMasterKey,
+  decryptPrivateKey,
+  encryptPrivateKey,
+} from "../function/crypto";
 
 const router = useRouter();
 
@@ -67,12 +74,21 @@ const onSubmit = async (e) => {
 
     const data = await res.json();
 
-    if (!data?.encrypted_master_key || !data?.kdf_salt) {
+    if (
+      !data?.encrypted_master_key ||
+      !data?.encrypted_private_key ||
+      !data?.kdf_salt
+    ) {
       throw new Error("Invalid crypto payload from backend");
     }
 
     const encryptedMKFull = Uint8Array.from(
       atob(data.encrypted_master_key),
+      (c) => c.charCodeAt(0),
+    );
+
+    const encryptedPrivateKeyFull = Uint8Array.from(
+      atob(data.encrypted_private_key),
       (c) => c.charCodeAt(0),
     );
 
@@ -83,82 +99,79 @@ const onSubmit = async (e) => {
     // =========================
     // OLD KEK
     // =========================
-    const oldKekRaw = await argon2id({
-      password: currentPassword.value,
-      salt: kdfSalt,
-      parallelism: 1,
-      iterations: 3,
-      memorySize: 65536,
-      hashLength: 32,
-      outputType: "binary",
-    });
 
-    const oldKek = await crypto.subtle.importKey(
-      "raw",
-      oldKekRaw,
-      { name: "AES-GCM" },
-      false,
-      ["decrypt"],
-    );
+    const oldKekRaw = await deriveKEK(currentPassword.value, kdfSalt);
+    const oldKek = await importKEK(oldKekRaw, "decrypt");
 
     // =========================
     // DECRYPT MASTER KEY
     // =========================
+
     const iv = encryptedMKFull.slice(0, 12);
     const encryptedData = encryptedMKFull.slice(12);
 
-    let masterKeyBuffer;
+    let masterKey;
 
     try {
-      masterKeyBuffer = await crypto.subtle.decrypt(
-        { name: "AES-GCM", iv, tagLength: 128 },
-        oldKek,
-        encryptedData,
-      );
-    } catch (err) {
+      masterKey = await decryptMasterKey(iv, oldKek, encryptedData);
+    } catch {
       throw new Error("Current password is incorrect");
     }
-
-    const masterKey = new Uint8Array(masterKeyBuffer);
 
     console.log("Master key decrypted OK");
 
     // =========================
+    // DECRYPT PRIVATE KEY
+    // =========================
+
+    const privateKeyIv = encryptedPrivateKeyFull.slice(0, 12);
+    const encryptedPrivateKey = encryptedPrivateKeyFull.slice(12);
+
+    const privateKeyPkcs8 = await decryptPrivateKey(
+      privateKeyIv,
+      oldKek,
+      encryptedPrivateKey,
+    );
+
+    // =========================
     // NEW KEK
     // =========================
+
+    //watch a partir d'ici
     const newKdfSalt = crypto.getRandomValues(new Uint8Array(16));
 
-    const newKekRaw = await argon2id({
-      password: newPassword.value,
-      salt: newKdfSalt,
-      parallelism: 1,
-      iterations: 3,
-      memorySize: 65536,
-      hashLength: 32,
-      outputType: "binary",
-    });
+    const newKekRaw = await deriveKEK(newPassword.value, newKdfSalt);
 
-    const newKek = await crypto.subtle.importKey(
-      "raw",
-      newKekRaw,
-      { name: "AES-GCM" },
-      false,
-      ["encrypt"],
-    );
+    const newKek = await importKEK(newKekRaw, "encrypt");
 
     // =========================
     // RE-ENCRYPT MASTER KEY
     // =========================
     const newIv = crypto.getRandomValues(new Uint8Array(12));
 
-    const newEncryptedMK = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: newIv },
-      newKek,
-      masterKey,
-    );
+    const newEncryptedMK = await encryptMasterKey(newIv, newKek, masterKey);
 
     const finalEncryptedMK = new Uint8Array(
       newIv.length + newEncryptedMK.byteLength,
+    );
+
+    const newPrivateKeyIv = crypto.getRandomValues(new Uint8Array(12));
+
+    const newEncryptedPrivateKey = await encryptPrivateKey(
+      newPrivateKeyIv,
+      newKek,
+      privateKeyPkcs8,
+    );
+
+    const finalEncryptedPrivateKey = new Uint8Array(
+      newPrivateKeyIv.length + newEncryptedPrivateKey.byteLength,
+    );
+
+    finalEncryptedPrivateKey.set(newPrivateKeyIv, 0);
+
+    finalEncryptedPrivateKey.set(
+      new Uint8Array(newEncryptedPrivateKey),
+      newPrivateKeyIv.length,
     );
 
     finalEncryptedMK.set(newIv, 0);
@@ -174,7 +187,10 @@ const onSubmit = async (e) => {
       body: JSON.stringify({
         oldPassword: currentPassword.value,
         newPassword: newPassword.value,
+
         encMK: btoa(String.fromCharCode(...finalEncryptedMK)),
+        encPrivateKey: btoa(String.fromCharCode(...finalEncryptedPrivateKey)),
+
         kdfSalt: btoa(String.fromCharCode(...newKdfSalt)),
       }),
     });

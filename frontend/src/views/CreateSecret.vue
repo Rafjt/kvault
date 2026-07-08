@@ -1,8 +1,9 @@
 <script setup>
 import { ref } from "vue"
-import { useCryptoStore, encryptSecret } from "../stores/crypto.store"
+import { useCryptoStore } from "../stores/crypto.store"
 import { API_BASE_URL } from "../components/constant"
 import { useRouter } from "vue-router"
+import { encryptSecret } from "../function/crypto"
 
 const cryptoStore = useCryptoStore()
 const router = useRouter()
@@ -35,10 +36,12 @@ async function submitSecret() {
 
   try {
     // 🔐 chiffrement uniquement de la valeur
-    const { ciphertext, nonce } = await encryptSecret(
+    const ciphertext = await encryptSecret(
       form.value.value,
       cryptoStore.masterKey
     )
+
+    console.log(ciphertext)
 
     const res = await fetch(`${API_BASE_URL}/create`, {
       method: "POST",
@@ -47,8 +50,7 @@ async function submitSecret() {
       body: JSON.stringify({
         name: form.value.name,
         type: form.value.type,
-        ciphertext,
-        nonce
+        ciphertext
       })
     })
 

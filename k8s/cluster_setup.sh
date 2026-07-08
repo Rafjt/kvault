@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 
 # Quitter immédiatement si une commande échoue
 set -euo pipefail # Le -u lève une erreur si une variable est vide, le -o pipefail sécurise les pipes

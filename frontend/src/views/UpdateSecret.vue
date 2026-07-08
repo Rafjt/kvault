@@ -1,9 +1,10 @@
 <script setup>
 import { ref, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { useCryptoStore, encryptSecret } from "../stores/crypto.store"
+import { useCryptoStore } from "../stores/crypto.store"
 import { API_BASE_URL } from "../components/constant"
 import { fetchSecret } from "../function/function"
+import { encryptSecret, decryptSecret } from "../function/crypto"
 
 const route = useRoute()
 const router = useRouter()
@@ -20,20 +21,6 @@ const form = ref({
   value: ""
 })
 
-// 🔓 Déchiffrement
-async function decryptSecret(ciphertextB64, nonceB64) {
-  const ciphertext = Uint8Array.from(atob(ciphertextB64), c => c.charCodeAt(0))
-  const iv = Uint8Array.from(atob(nonceB64), c => c.charCodeAt(0))
-
-  const decrypted = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
-    cryptoStore.masterKey,
-    ciphertext
-  )
-
-  return new TextDecoder().decode(decrypted)
-}
-
 // 🔄 UPDATE
 async function submitSecret() {
   errorMessage.value = ""
@@ -46,10 +33,12 @@ async function submitSecret() {
   loading.value = true
 
   try {
-    const { ciphertext, nonce } = await encryptSecret(
+    const ciphertext = await encryptSecret(
       form.value.value,
       cryptoStore.masterKey
     )
+
+    console.log(ciphertext)
 
     const res = await fetch(`${API_BASE_URL}/update/${secretId}`, {
       method: "PUT",
@@ -58,8 +47,7 @@ async function submitSecret() {
       body: JSON.stringify({
         name: form.value.name,
         type: form.value.type,
-        ciphertext,
-        nonce
+        ciphertext: ciphertext,
       })
     })
 
@@ -91,7 +79,7 @@ onMounted(async () => {
 
     form.value.value = await decryptSecret(
       secret.ciphertext,
-      secret.nonce
+      cryptoStore.masterKey
     )
 
   } catch (err) {
