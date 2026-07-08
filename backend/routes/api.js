@@ -818,7 +818,7 @@ router.delete("/org/:id", authMiddleware, async (req, res) => {
     // Seuls le créateur ('owner') ou un 'admin' peuvent supprimer l'organisation
     if (userRole !== 'owner' && userRole !== 'admin') {
       return res.status(403).json({ 
-        message: "Action non autorisée. Vous devez être administrateur ou propriétaire pour supprimer cette organisation." 
+        message: "Access denied. Only organization owners and admins can delete organizations." 
       });
     }
 
@@ -878,7 +878,7 @@ router.delete("/org/secret/:secretId", authMiddleware, async (req, res) => {
     // Seuls le créateur ('owner') ou un 'admin' peuvent supprimer le secret
     if (userRole !== 'owner' && userRole !== 'admin') {
       return res.status(403).json({ 
-        message: "Action non autorisée. Vous devez être administrateur ou propriétaire pour supprimer ce secret." 
+        message: "Access denied. Only organization owners and admins can delete secrets." 
       });
     }
 
