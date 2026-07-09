@@ -342,7 +342,7 @@ export async function decryptOrganizationSecret(ciphertext, encryptedCipherKey, 
         "raw",
         rawCipherKey,
         { name: "AES-GCM" },
-        true,
+        false,
         ["decrypt"]
     )
 
@@ -363,7 +363,7 @@ export async function importOSK(oskRaw) {
       name: "AES-GCM",
       length: 256
     },
-    true, // Permet d'exporter la clé si nécessaire (mettez false si vous voulez la verrouiller en mémoire)
+    false,
     ["encrypt", "decrypt"]
   );
 }

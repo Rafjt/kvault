@@ -176,14 +176,7 @@ const fetchSecrets = async () => {
       secrets.value = data.secrets || [];
 
       for (const s of secrets.value) {
-        showValues.value[s.id] = false
-
-        try {
-          s.value = await decryptSecret(s.ciphertext, cryptoStore.masterKey)
-        } catch (e) {
-          console.error("Decrypt error for secret", s.id, e);
-          s.value = "ERROR";
-        }
+        showValues.value[s.id] = false;
       }
     }
   } catch (err) {
@@ -193,8 +186,22 @@ const fetchSecrets = async () => {
   }
 };
 
-const toggleValue = (id) => {
-  showValues.value[id] = !showValues.value[id];
+const toggleValue = async (secret) => {
+ 
+  if (!showValues.value[secret.id] && !secret.value) {
+    try {
+      secret.value = "Decrypting..."; 
+      
+      secret.value = await decryptSecret(secret.ciphertext, cryptoStore.masterKey);
+    } catch (e) {
+      console.error("Decrypt error for secret", secret.id, e);
+      secret.value = "ERROR";
+    }
+  }
+  else {
+    secret.value = null; 
+  }
+  showValues.value[secret.id] = !showValues.value[secret.id];
 };
 
 const filteredSecrets = computed(() => {
@@ -373,7 +380,7 @@ onMounted(async () => {
           </div>
 
           <div class="secret-actions">
-            <button @click="toggleValue(secret.id)">
+            <button @click="toggleValue(secret)">
               {{ showValues[secret.id] ? 'Hide' : 'Show' }}
             </button>
             <button @click="handleUpdateSecret(secret.id)">Update</button>
