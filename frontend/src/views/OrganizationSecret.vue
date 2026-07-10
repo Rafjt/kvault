@@ -21,11 +21,14 @@ const loading = ref(false)
 const errorMessage = ref('')
 const showValues = ref({})
 
+// Stockage de la clé d'organisation importée pour pouvoir l'utiliser à la demande
+const orgOsk = ref(null)
+
 // États des filtres locaux
 const searchQuery = ref('')
 const selectedType = ref('all')
 
-// Récupération unique de TOUS les secrets de l'organisation au montage
+// Récupération unique de TOUS les secrets (chiffrés) de l'organisation au montage
 const fetchOrgSecrets = async () => {
   loading.value = true
   errorMessage.value = ''
@@ -38,8 +41,6 @@ const fetchOrgSecrets = async () => {
 
     const data = await res.json().catch(() => ({}))
 
-    console.log(data)
-
     if (!res.ok) {
       errorMessage.value = data.message || 'Failed to load organization secrets'
       return
@@ -47,21 +48,18 @@ const fetchOrgSecrets = async () => {
 
     const fetchedSecrets = data.secrets || []
 
-    const rawOosk = await decryptOsk(data.protected_osk,cryptoStore.rsaPrivateKey)
-
+    // 1. Déchiffrement et importation de la clé d'organisation (OSK)
+    const rawOosk = await decryptOsk(data.protected_osk, cryptoStore.rsaPrivateKey)
     const osk = await importOSK(rawOosk)
-
+    
+    // Sauvegarde dans le store et localement pour le déchiffrement à la volée
     cryptoStore.setOrganizationKey(props.orgId, osk)
+    orgOsk.value = osk
 
-    // Déchiffrement initial de l'ensemble des secrets reçus
+    // 2. Initialisation des états de visibilité à false (SANS déchiffrer les secrets)
     for (const s of fetchedSecrets) {
       showValues.value[s.id] = false
-      try {
-        s.value = await decryptOrganizationSecret(s.ciphertext, s.encrypted_cipher_key ,osk)
-      } catch (e) {
-        console.error('Decrypt error for secret', s.id, e)
-        s.value = '⚠️ Decryption Error'
-      }
+      s.value = null // La valeur reste vide en mémoire
     }
 
     secrets.value = fetchedSecrets
@@ -74,8 +72,34 @@ const fetchOrgSecrets = async () => {
   }
 }
 
-const toggleValue = (id) => {
-  showValues.value[id] = !showValues.value[id]
+// Gère le déchiffrement à la demande et le nettoyage de la mémoire
+const toggleValue = async (secret) => {
+  // Cas 1 : Le secret est masqué, on veut l'AFFICHER
+  if (!showValues.value[secret.id]) {
+    try {
+      secret.value = 'Decrypting...'
+      
+      // Utilisation de la clé d'organisation (orgOsk) récupérée au montage
+      if (!orgOsk.value) throw new Error("Organization key not available")
+      
+      secret.value = await decryptOrganizationSecret(
+        secret.ciphertext, 
+        secret.encrypted_cipher_key, 
+        orgOsk.value
+      )
+    } catch (e) {
+      console.error('Decrypt error for secret', secret.id, e)
+      secret.value = '⚠️ Decryption Error'
+    }
+  } 
+  // Cas 2 : Le secret est affiché, on veut le MASQUER
+  else {
+    // Nettoyage immédiat de la RAM
+    secret.value = null
+  }
+
+  // Bascule de l'affichage
+  showValues.value[secret.id] = !showValues.value[secret.id]
 }
 
 const handleUpdateSecret = (secretId, orgId) => {
@@ -83,9 +107,6 @@ const handleUpdateSecret = (secretId, orgId) => {
 }
 
 const deleteSecret = async (secretId, orgId) => {
-
-  console.log(secretId)
-  console.log(orgId)
   if (!confirm("Delete this secret ?")) {
     return
   }
@@ -108,8 +129,8 @@ const deleteSecret = async (secretId, orgId) => {
       throw new Error(data.message || "Failed to delete secret")
     }
 
-    // retire immédiatement le secret de la liste
     secrets.value = secrets.value.filter(s => s.id !== secretId)
+    delete showValues.value[secretId]
 
   } catch (err) {
     console.error(err)
@@ -117,7 +138,6 @@ const deleteSecret = async (secretId, orgId) => {
   }
 }
 
-// Filtrage local en synchrone basé sur le comportement de ton Home
 const filteredOrgSecrets = computed(() => {
   return secrets.value.filter((s) => {
     const matchType = selectedType.value === 'all' || s.type === selectedType.value
@@ -148,7 +168,6 @@ onMounted(() => {
       </button>
     </div>
 
-    <!-- BARRE DE FILTRES SYNCHRONE -->
     <div class="secrets-controls">
       <div class="search-box">
         <input 
@@ -169,18 +188,15 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- ÉTATS DE CHARGEMENT ET ERREURS -->
     <div v-if="loading" style="color: #6b7280;">Loading shared secrets...</div>
     <div v-if="errorMessage" class="error-message" style="text-align: left; margin-bottom: 1.5rem;">
       {{ errorMessage }}
     </div>
 
-    <!-- CAS COMPTEUR À ZÉRO -->
     <div v-if="!loading && filteredOrgSecrets.length === 0" style="color: #6b7280; font-style: italic;">
       No shared secrets found matching your criteria.
     </div>
 
-    <!-- LISTE DES CARTES -->
     <ul v-if="secrets.length > 0" class="secrets-list" style="list-style: none; padding: 0;">
       <li 
         v-for="secret in filteredOrgSecrets" 
@@ -208,7 +224,7 @@ onMounted(() => {
         </div>
 
         <div class="secret-actions">
-          <button @click="toggleValue(secret.id)">
+          <button @click="toggleValue(secret)">
             {{ showValues[secret.id] ? 'Hide' : 'Show' }}
           </button>
           <button @click="handleUpdateSecret(secret.id, props.orgId)">
@@ -216,7 +232,7 @@ onMounted(() => {
           </button>
           <button @click="deleteSecret(secret.id, props.orgId)">
             Delete
-        </button>
+          </button>
         </div>
       </li>
     </ul>
