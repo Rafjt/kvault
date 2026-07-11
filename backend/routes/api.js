@@ -24,21 +24,8 @@ router.get("/check", authMiddleware, (req, res) => {
 router.get("/secrets", authMiddleware, async (req, res) => {
   const userId = req.user.id;
 
-  // Filtres optionnels
-  const { type, name } = req.query;
-
-  let whereClause = "WHERE owner_id = ?";
+  const whereClause = "WHERE owner_id = ?";
   const replacements = [userId];
-
-  if (type) {
-    whereClause += " AND type = ?";
-    replacements.push(type);
-  }
-
-  if (name) {
-    whereClause += " AND name LIKE ?";
-    replacements.push(`%${name}%`);
-  }
 
   try {
     const secrets = await sequelize.query(
@@ -1074,53 +1061,6 @@ router.post("/org/:orgid/invite", authMiddleware, async (req, res) => {
   } catch (error) {
     console.error("Create invitation error:", error);
     return res.status(500).json({ message: "Internal server error" });
-  }
-});
-
-
-// Récupérer les infos des invitations des user
-router.get("/user/invitations", authMiddleware, async (req, res) => {
-  const userId = req.user.id;
-  const userEmail = req.user.email; // Récupéré de ton token d'authentification dans l'authMiddleware
-
-  try {
-    // On sélectionne toutes les invitations destinées à cet email
-    // On inclut le nom de l'organisation et le login de la personne qui a invité (pratique pour l'UI)
-    const invitations = await sequelize.query(
-      `
-      SELECT 
-        oi.id, 
-        oi.organization_id, 
-        o.name AS organization_name,
-        oi.login, 
-        oi.role, 
-        oi.status, 
-        oi.token,
-        oi.expires_at,
-        oi.created_at,
-        u.login AS invited_by_user
-      FROM organization_invitations oi
-      INNER JOIN organizations o ON oi.organization_id = o.id
-      INNER JOIN users u ON oi.invited_by = u.id
-      WHERE LOWER(oi.login) = LOWER(:userEmail)
-      ORDER BY oi.created_at DESC;
-      `,
-      {
-        replacements: { userEmail },
-        type: QueryTypes.SELECT
-      }
-    );
-
-    // On renvoie la liste complète (qu'elle soit vide ou pleine)
-    return res.status(200).json({
-      invitations
-    });
-
-  } catch (error) {
-    console.error("Get user invitations error:", error);
-    return res.status(500).json({ 
-      message: "Internal server error" 
-    });
   }
 });
 
