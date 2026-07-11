@@ -131,48 +131,9 @@ router.post("/register", Limiter, async (req, res) => {
     const hashedPassword = await hashPassword(password);
 
     // =========================
-    // Crypto setup
+    // Token setup
     // =========================
     const verificationToken = crypto.randomBytes(32).toString("hex");
-    // const kdfSalt = crypto.randomBytes(16);
-    // const ITERATIONS = 210_000;
-
-    // // Master Key aléatoire (indépendante du mot de passe)
-    // const masterKey = crypto.randomBytes(32);
-
-    // const kek = await argon2.hash(password, {
-    //   type: argon2.argon2id,
-
-    //   salt: kdfSalt,
-
-    //   memoryCost: 65536, // 64 MB
-    //   timeCost: 3,
-    //   parallelism: 1,
-
-    //   hashLength: 32,
-
-    //   raw: true
-    // });
-
-    // // =========================
-    // // Chiffrement Master Key (AES-GCM)
-    // // =========================
-    // const iv = crypto.randomBytes(12); // nonce GCM
-    // const cipher = crypto.createCipheriv("aes-256-gcm", kek, iv);
-
-    // const ciphertext = Buffer.concat([
-    //   cipher.update(masterKey),
-    //   cipher.final()
-    // ]);
-
-    // const authTag = cipher.getAuthTag();
-
-    // // FORMAT CANONIQUE : IV || CIPHERTEXT || TAG
-    // const encryptedMasterKey = Buffer.concat([
-    //   iv,
-    //   ciphertext,
-    //   authTag
-    // ]);
 
     // =========================
     // Insert DB
