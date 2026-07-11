@@ -32,7 +32,7 @@ export const sendMail = async (to, subject, text, html) => {
 };
 
 export const sendTokenMail = async (verificationToken, email) => {
-  const verificationLink = `http://kvault.local/auth/verify-email?token=${verificationToken}`;
+  const verificationLink = `https://kvault.local/auth/verify-email?token=${verificationToken}`;
 
   const html = `
   <!DOCTYPE html>

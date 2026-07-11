@@ -1,5 +1,5 @@
 import bcrypt from "bcrypt";
-const saltRounds = 17; // Facteur de travail
+const saltRounds = 13;
 
 export const hashPassword = async (plainPassword) => {
   try {
