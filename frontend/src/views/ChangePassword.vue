@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
-import { API_AUTH_URL } from "../components/constant.js";
+import { fetchCryptoMaterial, rotatePassword } from "../function/function";
 import {
   deriveKEK,
   importKEK,
@@ -63,24 +63,7 @@ const onSubmit = async (e) => {
   try {
     console.log("Fetching crypto material...");
 
-    const res = await fetch(`${API_AUTH_URL}/crypto`, {
-      method: "GET",
-      credentials: "include",
-    });
-
-    if (!res.ok) {
-      throw new Error(`Crypto fetch failed (${res.status})`);
-    }
-
-    const data = await res.json();
-
-    if (
-      !data?.encrypted_master_key ||
-      !data?.encrypted_private_key ||
-      !data?.kdf_salt
-    ) {
-      throw new Error("Invalid crypto payload from backend");
-    }
+    const data = await fetchCryptoMaterial();
 
     const encryptedMKFull = Uint8Array.from(
       atob(data.encrypted_master_key),
@@ -180,25 +163,15 @@ const onSubmit = async (e) => {
     // =========================
     // SEND TO BACKEND
     // =========================
-    const updateRes = await fetch(`${API_AUTH_URL}/crypto/rotate-password`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        oldPassword: currentPassword.value,
-        newPassword: newPassword.value,
+    await rotatePassword({
+      oldPassword: currentPassword.value,
+      newPassword: newPassword.value,
 
-        encMK: btoa(String.fromCharCode(...finalEncryptedMK)),
-        encPrivateKey: btoa(String.fromCharCode(...finalEncryptedPrivateKey)),
+      encMK: btoa(String.fromCharCode(...finalEncryptedMK)),
+      encPrivateKey: btoa(String.fromCharCode(...finalEncryptedPrivateKey)),
 
-        kdfSalt: btoa(String.fromCharCode(...newKdfSalt)),
-      }),
+      kdfSalt: btoa(String.fromCharCode(...newKdfSalt)),
     });
-
-    if (!updateRes.ok) {
-      const errData = await updateRes.json().catch(() => ({}));
-      throw new Error(errData.message || "Password rotation failed");
-    }
 
     successMessage.value =
       "Password successfully updated.\nYou will be redirected to the login page.";

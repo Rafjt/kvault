@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from "vue"
 import { useRouter } from "vue-router"
-import { API_BASE_URL } from "../components/constant"
+import { createOrganization } from "../function/function"
 import { encryptOsk } from "../function/crypto"
 import { useCryptoStore } from "../stores/crypto.store"
 
@@ -39,23 +39,10 @@ async function submitOrganization() {
 
     const encryptedOskBlob = await encryptOsk(osk, cryptoStore.rsaPublicKey)
 
-    const res = await fetch(`${API_BASE_URL}/org/create`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        name: form.value.name,
-        encOsk: encryptedOskBlob
-      })
-    })
-
-    const data = await res.json().catch(() => ({}))
-
-    if (!res.ok) {
-      throw new Error(data.error || "Failed to create organization")
-    }
+    await createOrganization(
+      form.value.name,
+      encryptedOskBlob
+    )
 
     router.push("/home")
 

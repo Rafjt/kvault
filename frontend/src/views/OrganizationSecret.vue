@@ -1,7 +1,10 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from "vue-router"
-import { API_BASE_URL } from "../components/constant.js"
+import {
+  fetchOrganizationSecrets,
+  deleteOrganizationSecret
+} from "../function/function"
 import { useCryptoStore } from "../stores/crypto.store"
 import { decryptOrganizationSecret, decryptOsk, importOSK } from '../function/crypto.js'
 
@@ -29,44 +32,36 @@ const searchQuery = ref('')
 const selectedType = ref('all')
 
 // Récupération unique de TOUS les secrets (chiffrés) de l'organisation au montage
-const fetchOrgSecrets = async () => {
+const loadOrgSecrets = async () => {
   loading.value = true
   errorMessage.value = ''
-  
+
   try {
-    const res = await fetch(`${API_BASE_URL}/org/${props.orgId}/secrets`, {
-      method: 'GET',
-      credentials: 'include'
-    })
-
-    const data = await res.json().catch(() => ({}))
-
-    if (!res.ok) {
-      errorMessage.value = data.message || 'Failed to load organization secrets'
-      return
-    }
+    const data = await fetchOrganizationSecrets(props.orgId)
 
     const fetchedSecrets = data.secrets || []
 
-    // 1. Déchiffrement et importation de la clé d'organisation (OSK)
-    const rawOosk = await decryptOsk(data.protected_osk, cryptoStore.rsaPrivateKey)
+    const rawOosk = await decryptOsk(
+      data.protected_osk,
+      cryptoStore.rsaPrivateKey
+    )
+
     const osk = await importOSK(rawOosk)
-    
-    // Sauvegarde dans le store et localement pour le déchiffrement à la volée
+
     cryptoStore.setOrganizationKey(props.orgId, osk)
     orgOsk.value = osk
 
-    // 2. Initialisation des états de visibilité à false (SANS déchiffrer les secrets)
     for (const s of fetchedSecrets) {
       showValues.value[s.id] = false
-      s.value = null // La valeur reste vide en mémoire
+      s.value = null
     }
 
     secrets.value = fetchedSecrets
 
   } catch (err) {
     console.error(err)
-    errorMessage.value = 'Network error'
+    errorMessage.value = err.message || "Network error"
+
   } finally {
     loading.value = false
   }
@@ -106,30 +101,18 @@ const handleUpdateSecret = (secretId, orgId) => {
   router.push(`/updateOrgSecret/${orgId}/${secretId}`)
 }
 
-const deleteSecret = async (secretId, orgId) => {
+const handleDeleteSecret = async (secretId) => {
   if (!confirm("Delete this secret ?")) {
     return
   }
 
   try {
-    const res = await fetch(`${API_BASE_URL}/org/secret/${secretId}`, {
-      method: "DELETE",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        orgId: props.orgId
-      })
-    })
+    await deleteOrganizationSecret(secretId, props.orgId)
 
-    const data = await res.json().catch(() => ({}))
+    secrets.value = secrets.value.filter(
+      s => s.id !== secretId
+    )
 
-    if (!res.ok) {
-      throw new Error(data.message || "Failed to delete secret")
-    }
-
-    secrets.value = secrets.value.filter(s => s.id !== secretId)
     delete showValues.value[secretId]
 
   } catch (err) {
@@ -151,7 +134,7 @@ onMounted(() => {
     console.warn("MasterKey not loaded yet")
     return
   }
-  fetchOrgSecrets()
+  loadOrgSecrets()
 })
 </script>
 
@@ -230,7 +213,7 @@ onMounted(() => {
           <button @click="handleUpdateSecret(secret.id, props.orgId)">
             Update
           </button>
-          <button @click="deleteSecret(secret.id, props.orgId)">
+          <button @click="handleDeleteSecret(secret.id)">
             Delete
           </button>
         </div>

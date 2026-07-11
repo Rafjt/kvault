@@ -1,7 +1,11 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { API_BASE_URL } from "../components/constant.js"
+import {
+  fetchOrganizationDetails,
+  fetchPendingConfirmations,
+  confirmOrganizationUser
+} from "../function/function"
 import { useCryptoStore } from "../stores/crypto.store"
 import { decryptOsk } from "../function/crypto.js"
 
@@ -33,31 +37,21 @@ function base64ToArrayBuffer(base64) {
   return bytes.buffer
 }
 
-const fetchOrganizationDetails = async () => {
+const loadOrganizationDetails = async () => {
   try {
-    const res = await fetch(`${API_BASE_URL}/org/${orgId.value}`, {
-      credentials: "include"
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.message || "Failed to fetch organization details")
-    organization.value = data.organization || null
+    organization.value = await fetchOrganizationDetails(orgId.value)
   } catch (err) {
     console.error(err)
-    errorMessage.value = err.message || "An error occurred while loading organization details."
+    errorMessage.value = err.message
   }
 }
 
-const fetchPendingConfirmations = async () => {
+const loadPendingConfirmations = async () => {
   try {
-    const res = await fetch(`${API_BASE_URL}/org/${orgId.value}/invitations/pending-confirm`, {
-      credentials: "include"
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.message || "Failed to fetch pending confirmations")
-    pendingUsers.value = data || []
+    pendingUsers.value = await fetchPendingConfirmations(orgId.value)
   } catch (err) {
     console.error(err)
-    errorMessage.value = err.message || "An error occurred while loading pending confirmations."
+    errorMessage.value = err.message
   }
 }
 
@@ -66,8 +60,8 @@ const initPage = async () => {
   errorMessage.value = ''
   try {
     await Promise.all([
-      fetchOrganizationDetails(),
-      fetchPendingConfirmations()
+      loadOrganizationDetails(),
+      loadPendingConfirmations()
     ])
   } catch (err) {
     console.error("Init page error", err)
@@ -125,20 +119,12 @@ const handleConfirmUser = async (user) => {
     )
 
     // ÉTAPE E : Envoi au serveur
-    const res = await fetch(`${API_BASE_URL}/org/${orgId.value}/invitations/${user.invitation_id}/confirm`, {
-      method: "PUT",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        protected_osk: base64ProtectedOsk
-      })
-    })
-
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data.message || "Failed to confirm user")
-
+    const data = await confirmOrganizationUser(
+      orgId.value,
+      user.invitation_id,
+      base64ProtectedOsk
+    )
+    
     alert(data.message || "User access confirmed successfully!")
     pendingUsers.value = pendingUsers.value.filter(u => u.invitation_id !== user.invitation_id)
 

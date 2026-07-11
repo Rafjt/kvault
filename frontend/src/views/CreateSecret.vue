@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from "vue"
 import { useCryptoStore } from "../stores/crypto.store"
-import { API_BASE_URL } from "../components/constant"
+import { createSecret } from "../function/function"
 import { useRouter } from "vue-router"
 import { encryptSecret } from "../function/crypto"
 
@@ -43,21 +43,11 @@ async function submitSecret() {
 
     console.log(ciphertext)
 
-    const res = await fetch(`${API_BASE_URL}/create`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: form.value.name,
-        type: form.value.type,
-        ciphertext
-      })
-    })
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      throw new Error(data.message || "Failed to create secret")
-    }
+    await createSecret(
+      form.value.name,
+      form.value.type,
+      ciphertext
+    )
 
     // reset + retour home
     form.value.value = ""

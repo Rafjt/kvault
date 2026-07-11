@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { API_AUTH_URL } from "../components/constant.js";
+import { registerUser } from "../function/function"
 import { importKEK, deriveKEK, encryptMasterKey, generateRSAKeyPair, exportRsaKeyPair, encryptPrivateKey } from '../function/crypto.js';
 
 const router = useRouter()
@@ -92,31 +92,21 @@ const onSubmit = async (e) => {
       privateKeyIv.length
     )
 
-    // . Envoi au serveur (L'encodage est délégué proprement ici sans polluer les variables)
-    const res = await fetch(`${API_AUTH_URL}/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        email: email.value,
-        password: password.value,
-        encMK: arrayBufferToBase64(encryptedMasterKey),
-        kdfSalt: arrayBufferToBase64(kdfSalt),
-        
-        rsaPublicKey: arrayBufferToBase64(publicKeySpki),
-        encPrivateKey: arrayBufferToBase64(encryptedPrivateKeyBlob)
-
-      })
+    // Envoi au serveur (L'encodage est délégué proprement ici sans polluer les variables)
+    const data = await registerUser({
+      email: email.value,
+      password: password.value,
+      encMK: arrayBufferToBase64(encryptedMasterKey),
+      kdfSalt: arrayBufferToBase64(kdfSalt),
+      rsaPublicKey: arrayBufferToBase64(publicKeySpki),
+      encPrivateKey: arrayBufferToBase64(encryptedPrivateKeyBlob)
     })
 
-    const data = await res.json().catch(() => ({}))
+    successMessage.value = data.message || "Registration successful."
 
-    if (!res.ok) {
-      errorMessage.value = data.message || 'Registration failed'
-    } else {
-      successMessage.value = data.message || 'Registration successful.'
-      setTimeout(() => { router.push('/login') }, 5000)
-    }
+    setTimeout(() => {
+      router.push('/login')
+    }, 5000)
   } catch (err) {
     errorMessage.value = 'An error occurred during registration'
     console.error(err)

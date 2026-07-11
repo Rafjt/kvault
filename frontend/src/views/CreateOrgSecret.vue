@@ -1,10 +1,9 @@
 <script setup>
 import { ref, onMounted } from "vue"
 import { useCryptoStore } from "../stores/crypto.store"
-import { API_BASE_URL } from "../components/constant"
 import { useRouter } from "vue-router"
-import { encryptOrganizationSecret, generateAESKey, decryptOsk, importOSK } from "../function/crypto" // N'oublie pas d'importer decryptOsk
-import { fetchOrg } from "../function/function"
+import { encryptOrganizationSecret, decryptOsk, importOSK } from "../function/crypto" // N'oublie pas d'importer decryptOsk
+import { fetchOrg, createOrganizationSecret } from "../function/function"
 
 const cryptoStore = useCryptoStore()
 const router = useRouter()
@@ -78,23 +77,13 @@ async function submitSecret() {
     // Correction de tes variables (tu avais 'plaintext' au lieu de 'form.value.value')
     const [ciphertext, encryptedCipherKey] = await encryptOrganizationSecret(form.value.value, osk)
 
-    const res = await fetch(`${API_BASE_URL}/org/${props.orgId}/secrets`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        organizationId: props.orgId,
-        name: form.value.name,
-        type: form.value.type,
-        ciphertext: ciphertext,
-        encryptedCipherKey: encryptedCipherKey
-      })
-    })
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      throw new Error(data.message || "Failed to create secret")
-    }
+    await createOrganizationSecret(
+      props.orgId,
+      form.value.name,
+      form.value.type,
+      ciphertext,
+      encryptedCipherKey
+    )
 
     form.value.value = ""
     router.push("/home")
