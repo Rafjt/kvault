@@ -63,7 +63,6 @@ router.get("/about", (req, res) => {
 router.get('/me', authMiddleware, (req, res) => {
   res.json({
     id: req.user.id,
-    email: req.user.login
   })
 })
 
