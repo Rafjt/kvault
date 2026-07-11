@@ -2,8 +2,10 @@
 import { ref, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { useCryptoStore } from "../stores/crypto.store"
-import { API_BASE_URL } from "../components/constant"
-import { fetchSecret } from "../function/function"
+import {
+  fetchSecret,
+  updateSecret
+} from "../function/function"
 import { encryptSecret, decryptSecret } from "../function/crypto"
 
 const route = useRoute()
@@ -40,21 +42,11 @@ async function submitSecret() {
 
     console.log(ciphertext)
 
-    const res = await fetch(`${API_BASE_URL}/update/${secretId}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: form.value.name,
-        type: form.value.type,
-        ciphertext: ciphertext,
-      })
+    await updateSecret(secretId, {
+      name: form.value.name,
+      type: form.value.type,
+      ciphertext
     })
-
-    if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.message)
-    }
 
     router.push("/home")
 

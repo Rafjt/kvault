@@ -1,6 +1,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { API_BASE_URL } from "../components/constant.js";
+import {
+  fetchPendingInvitations,
+  acceptInvitation
+} from "../function/function"
 import { useRouter } from "vue-router"
 
 const router = useRouter()
@@ -11,24 +14,17 @@ const errorMessage = ref('')
 const successMessage = ref('')
 
 // Charger les invitations en attente
-const fetchPendingInvitations = async () => {
+const loadPendingInvitations = async () => {
   loading.value = true
   errorMessage.value = ''
+
   try {
-    const res = await fetch(`${API_BASE_URL}/org/invitations/pending`, {
-      credentials: "include"
-    })
+    invitations.value = await fetchPendingInvitations()
 
-    const data = await res.json()
-
-    if (res.ok) {
-      invitations.value = data.invitations || []
-    } else {
-      errorMessage.value = data.message || "Failed to load invitations."
-    }
   } catch (err) {
     console.error(err)
-    errorMessage.value = "Network error while fetching invitations."
+    errorMessage.value = err.message || "Network error while fetching invitations."
+
   } finally {
     loading.value = false
   }
@@ -43,17 +39,7 @@ async function handleAccept(token) {
 
   try {
     // Appel de ton API en passant le token directement dans l'URL
-    const res = await fetch(`${API_BASE_URL}/invite/${token}/accept`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' }
-    })
-
-    const data = await res.json().catch(() => ({}))
-
-    if (!res.ok) {
-      throw new Error(data.message || "Failed to accept the invitation.")
-    }
+    await acceptInvitation(token)
 
     successMessage.value = "You successfully joined the organization, once the owner confirms your request you will be able to access the organisation secrets !"
     // Filtrer la liste localement pour retirer l'invitation validée
@@ -70,7 +56,7 @@ function goBack() {
 }
 
 onMounted(() => {
-  fetchPendingInvitations()
+  loadPendingInvitations()
 })
 </script>
 

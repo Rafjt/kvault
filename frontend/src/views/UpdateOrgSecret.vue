@@ -2,7 +2,10 @@
 import { ref, onMounted } from "vue"
 import { useRouter } from "vue-router"
 import { useCryptoStore } from "../stores/crypto.store"
-import { API_BASE_URL } from "../components/constant"
+import {
+  fetchOrganizationSecret,
+  updateOrganizationSecret
+} from "../function/function"
 
 import {
   decryptOsk,
@@ -53,28 +56,16 @@ async function submitSecret() {
         osk.value
       )
 
-    const res = await fetch(
-      `${API_BASE_URL}/org/${props.orgId}/secret/${props.secretId}`,
+    await updateOrganizationSecret(
+      props.orgId,
+      props.secretId,
       {
-        method: "PUT",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          name: form.value.name,
-          type: form.value.type,
-          ciphertext,
-          encrypted_cipher_key: encryptedCipherKey
-        })
+        name: form.value.name,
+        type: form.value.type,
+        ciphertext,
+        encrypted_cipher_key: encryptedCipherKey
       }
     )
-
-    const data = await res.json().catch(() => ({}))
-
-    if (!res.ok) {
-      throw new Error(data.message || "Update failed")
-    }
 
     router.push(`/org/${props.orgId}`)
 
@@ -97,18 +88,10 @@ onMounted(async () => {
 
   try {
 
-    const res = await fetch(
-      `${API_BASE_URL}/org/${props.orgId}/secret/${props.secretId}`,
-      {
-        credentials: "include"
-      }
+    const data = await fetchOrganizationSecret(
+      props.orgId,
+      props.secretId
     )
-
-    const data = await res.json().catch(() => ({}))
-
-    if (!res.ok) {
-      throw new Error(data.message || "Failed to load secret")
-    }
 
     const rawOsk = await decryptOsk(
       data.protected_osk,

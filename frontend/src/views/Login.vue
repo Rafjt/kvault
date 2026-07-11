@@ -2,7 +2,7 @@
 import { ref } from "vue"
 import { useRouter } from "vue-router"
 import { useCryptoStore } from "../stores/crypto.store"
-import { API_AUTH_URL } from "../components/constant.js"
+import { loginUser } from "../function/function"
 import { importKEK, deriveKEK, decryptMasterKey, importRsaKeyPair, decryptPrivateKey } from "../function/crypto.js"
 
 const router = useRouter();
@@ -26,24 +26,10 @@ const onSubmit = async (e) => {
 
   try {
 
-    const res = await fetch(`${API_AUTH_URL}/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      credentials: "include",
-      body: JSON.stringify({
-        email: email.value,
-        password: password.value,
-      }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      errorMessage.value = data.message || "Login failed";
-      return;
-    }
+    const data = await loginUser(
+      email.value,
+      password.value
+    )
 
     successMessage.value = data.message || "Login successful";
 
@@ -134,7 +120,6 @@ const onSubmit = async (e) => {
 
     router.push("/home")
 
-    router.push("/home");
   } catch (err) {
 
     console.error("LOGIN CRYPTO ERROR:", err)
