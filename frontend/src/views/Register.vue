@@ -131,6 +131,8 @@ const onSubmit = async (e) => {
     errorMessage.value = 'An error occurred during registration'
     console.error(err)
   } finally {
+    password.value = ''
+    confirmPassword.value = ''
     loading.value = false
   }
 }

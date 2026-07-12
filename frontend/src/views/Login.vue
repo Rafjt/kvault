@@ -116,8 +116,6 @@ const onSubmit = async (e) => {
     // CLEANUP
     // =========================
 
-    password.value = ""
-
     router.push("/home")
 
   } catch (err) {
@@ -127,7 +125,7 @@ const onSubmit = async (e) => {
     errorMessage.value = "Authentication or crypto error"
 
   } finally {
-
+    password.value = ""
     loading.value = false
 
   }
