@@ -6,12 +6,10 @@ export async function authGuard(to) {
 
   const cryptoStore = useCryptoStore()
 
-  // 1️⃣ MasterKey absente → login
   if (!cryptoStore.masterKey) {
     return { path: '/login' }
   }
 
-  // 2️⃣ Vérifier session backend (cookie)
   try {
     const res = await fetch(`${API_AUTH_URL}/me`, {
       credentials: 'include'
