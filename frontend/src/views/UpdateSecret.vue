@@ -23,7 +23,6 @@ const form = ref({
   value: ""
 })
 
-// 🔄 UPDATE
 async function submitSecret() {
   errorMessage.value = ""
 
@@ -92,7 +91,6 @@ onMounted(async () => {
     </div>
 
     <form @submit.prevent="submitSecret">
-      <!-- NAME -->
       <div>
         <label>Name</label>
         <input
@@ -102,7 +100,6 @@ onMounted(async () => {
         />
       </div>
 
-      <!-- TYPE -->
       <div>
         <label>Type</label>
         <select v-model="form.type">
@@ -114,7 +111,6 @@ onMounted(async () => {
         </select>
       </div>
 
-      <!-- VALUE -->
       <div>
         <label>Value</label>
         <textarea

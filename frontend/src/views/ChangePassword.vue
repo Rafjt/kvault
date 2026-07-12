@@ -120,7 +120,6 @@ const onSubmit = async (e) => {
     // NEW KEK
     // =========================
 
-    //watch a partir d'ici
     const newKdfSalt = crypto.getRandomValues(new Uint8Array(16));
 
     const newKekRaw = await deriveKEK(newPassword.value, newKdfSalt);
@@ -205,7 +204,6 @@ const onSubmit = async (e) => {
     </div>
 
     <form @submit="onSubmit">
-      <!-- Current password -->
       <div class="field">
         <label>Current password</label>
 
@@ -223,7 +221,6 @@ const onSubmit = async (e) => {
 
       <br />
 
-      <!-- New password -->
       <div class="field">
         <label>New password</label>
 
@@ -271,7 +268,6 @@ const onSubmit = async (e) => {
 
       <br />
 
-      <!-- Confirm password -->
       <div class="field">
         <label>Confirm new password</label>
 

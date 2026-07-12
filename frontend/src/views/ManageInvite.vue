@@ -13,7 +13,6 @@ const loading = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 
-// Charger les invitations en attente
 const loadPendingInvitations = async () => {
   loading.value = true
   errorMessage.value = ''
@@ -30,7 +29,6 @@ const loadPendingInvitations = async () => {
   }
 }
 
-// Accepter une invitation
 async function handleAccept(token) {
   errorMessage.value = ''
   successMessage.value = ''
@@ -38,11 +36,9 @@ async function handleAccept(token) {
   if (!confirm("Are you sure you want to join this organization?")) return
 
   try {
-    // Appel de ton API en passant le token directement dans l'URL
     await acceptInvitation(token)
 
     successMessage.value = "You successfully joined the organization, once the owner confirms your request you will be able to access the organisation secrets !"
-    // Filtrer la liste localement pour retirer l'invitation validée
     invitations.value = invitations.value.filter(i => i.token !== token)
     
   } catch (err) {
@@ -69,7 +65,6 @@ onMounted(() => {
         <h2>Manage Your Invitations</h2>
       </div>
 
-      <!-- Messages Flash -->
       <div v-if="errorMessage" class="message-banner error-msg">
         {{ errorMessage }}
       </div>
@@ -77,17 +72,14 @@ onMounted(() => {
         {{ successMessage }}
       </div>
 
-      <!-- État de chargement -->
       <div v-if="loading" class="loading-state">
         Loading invitations...
       </div>
 
-      <!-- Pas d'invitations -->
       <div v-if="!loading && invitations.length === 0" class="empty-state">
         <p>You have no pending invitations at the moment.</p>
       </div>
 
-      <!-- Liste des invitations -->
       <div v-if="invitations.length > 0" class="invitations-list">
         <div 
           v-for="invite in invitations" 

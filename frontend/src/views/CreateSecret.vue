@@ -35,7 +35,6 @@ async function submitSecret() {
   loading.value = true
 
   try {
-    // 🔐 chiffrement uniquement de la valeur
     const ciphertext = await encryptSecret(
       form.value.value,
       cryptoStore.masterKey
@@ -49,7 +48,6 @@ async function submitSecret() {
       ciphertext
     )
 
-    // reset + retour home
     form.value.value = ""
     router.push("/home")
 
