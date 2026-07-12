@@ -18,20 +18,16 @@ const props = defineProps({
   }
 })
 
-// États de la page
 const secrets = ref([])
 const loading = ref(false)
 const errorMessage = ref('')
 const showValues = ref({})
 
-// Stockage de la clé d'organisation importée pour pouvoir l'utiliser à la demande
 const orgOsk = ref(null)
 
-// États des filtres locaux
 const searchQuery = ref('')
 const selectedType = ref('all')
 
-// Récupération unique de TOUS les secrets (chiffrés) de l'organisation au montage
 const loadOrgSecrets = async () => {
   loading.value = true
   errorMessage.value = ''
@@ -67,14 +63,11 @@ const loadOrgSecrets = async () => {
   }
 }
 
-// Gère le déchiffrement à la demande et le nettoyage de la mémoire
 const toggleValue = async (secret) => {
-  // Cas 1 : Le secret est masqué, on veut l'AFFICHER
   if (!showValues.value[secret.id]) {
     try {
       secret.value = 'Decrypting...'
-      
-      // Utilisation de la clé d'organisation (orgOsk) récupérée au montage
+
       if (!orgOsk.value) throw new Error("Organization key not available")
       
       secret.value = await decryptOrganizationSecret(
@@ -87,13 +80,12 @@ const toggleValue = async (secret) => {
       secret.value = '⚠️ Decryption Error'
     }
   } 
-  // Cas 2 : Le secret est affiché, on veut le MASQUER
+
   else {
-    // Nettoyage immédiat de la RAM
+
     secret.value = null
   }
 
-  // Bascule de l'affichage
   showValues.value[secret.id] = !showValues.value[secret.id]
 }
 
