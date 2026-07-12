@@ -404,3 +404,71 @@ export async function updateOrganizationSecret(
 
   return data
 }
+
+// ######## Home related functions ######
+
+export async function fetchOrgInvites(orgId, email, role) {
+  const res = await fetch(`${API_BASE_URL}/org/${orgId}/invite`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      email,
+      role
+    })
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to send invitation")
+  }
+
+  return data
+}
+
+export async function deleteOrganization(orgId) {
+  const res = await fetch(`${API_BASE_URL}/org/${orgId}`, {
+    method: "DELETE",
+    credentials: "include"
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to delete organization")
+  }
+
+  return data
+}
+
+export async function fetchSecrets() {
+  const res = await fetch(`${API_BASE_URL}/secrets`, {
+    method: "GET",
+    credentials: "include"
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to load secrets")
+  }
+
+  return data.secrets || []
+}
+
+export async function fetchOrganizations() {
+  const res = await fetch(`${API_BASE_URL}/org`, {
+    credentials: "include"
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to load organizations")
+  }
+
+  return data
+}

@@ -3,7 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { API_BASE_URL } from "../components/constant.js";
 import { useCryptoStore } from "../stores/crypto.store";
 import { useRouter } from "vue-router"
-import { deleteSecret } from '../function/function'
+import { deleteSecret, fetchOrgInvites, deleteOrganization, fetchPendingConfirmations, fetchSecrets, fetchOrganizations } from '../function/function'
 import { decryptSecret } from '../function/crypto.js';
 
 const router = useRouter()
@@ -43,25 +43,14 @@ async function handleInviteMember(orgId) {
   }
 
   try {
-    const res = await fetch(`${API_BASE_URL}/org/${orgId}/invite`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        email: form.email,
-        role: form.role
-      })
-    })
-
-    const data = await res.json().catch(() => ({}))
-
-    if (!res.ok) {
-      throw new Error(data.message || "Failed to send invitation")
-    }
+    await fetchOrgInvites(
+      orgId,
+      form.email,
+      form.role
+    )
 
     alert("Invitation sent successfully!")
+
     form.email = ""
     form.role = "member"
 
@@ -77,17 +66,11 @@ async function handleDeleteOrg(orgId) {
   }
 
   try {
-    const res = await fetch(`${API_BASE_URL}/org/${orgId}`, {
-      method: 'DELETE',
-      credentials: 'include'
-    })
+    await deleteOrganization(orgId)
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      throw new Error(data.message || "Failed to delete organization")
-    }
+    organizations.value =
+      organizations.value.filter(o => o.id !== orgId)
 
-    organizations.value = organizations.value.filter(o => o.id !== orgId)
   } catch (err) {
     console.error("Delete organization failed", err)
     errorMessage.value = err.message || "Failed to delete organization"
@@ -109,75 +92,62 @@ async function handleUpdateSecret(secretId) {
   router.push(`/update/${secretId}`);
 }
 
-const fetchPendingConfirmations = async (orgId) => {
+const loadPendingConfirmations = async (orgId) => {
   try {
-    const res = await fetch(`${API_BASE_URL}/org/${orgId}/invitations/pending-confirm`, {
-      credentials: "include"
-    })
-    if (res.ok) {
-      const data = await res.json()
-      pendingConfirmationsCount.value[orgId] = data.length || 0
-    }
+    const data = await fetchPendingConfirmations(orgId)
+
+    pendingConfirmationsCount.value[orgId] = data.length || 0
+
   } catch (err) {
-    console.error(`Failed to fetch pending confirmations for org ${orgId}:`, err)
+    console.error(
+      `Failed to fetch pending confirmations for org ${orgId}:`,
+      err
+    )
   }
 }
 
-const fetchOrganizations = async () => {
+const loadOrganizations = async () => {
   try {
-    const res = await fetch(`${API_BASE_URL}/org`, {
-      credentials: "include"
+    const data = await fetchOrganizations()
+
+    organizations.value = data.organizations || []
+    invitations.value = data.invitations || []
+
+    organizations.value.forEach(org => {
+      inviteForms.value[org.id] = {
+        email: "",
+        role: "member"
+      }
+
+      if (org.role === "owner" || org.role === "admin") {
+        loadPendingConfirmations(org.id)
+      }
     })
 
-    const data = await res.json()
-
-    if (res.ok) {
-      organizations.value = data.organizations || []
-      invitations.value = data.invitations || [] 
-
-      organizations.value.forEach(org => {
-        inviteForms.value[org.id] = {
-          email: "",
-          role: "member"
-        }
-
-        if (org.role === 'owner' || org.role === 'admin') {
-          fetchPendingConfirmations(org.id)
-        }
-      })
-    }
   } catch (err) {
     console.error(err)
+    errorMessage.value = err.message || "Failed to load organizations"
   }
 }
 
-const fetchSecrets = async () => {
-  loading.value = true;
-  errorMessage.value = "";
+const loadSecrets = async () => {
+  loading.value = true
+  errorMessage.value = ""
 
   try {
-    const res = await fetch(`${API_BASE_URL}/secrets`, {
-      method: "GET",
-      credentials: "include",
-    });
+    secrets.value = await fetchSecrets()
 
-    const data = await res.json().catch(() => ({}))
-
-    if (!res.ok) {
-      errorMessage.value = data.message || "Failed to load secrets";
-    } else {
-      secrets.value = data.secrets || [];
-
-      for (const s of secrets.value) {
-        showValues.value[s.id] = false;
-      }
+    for (const s of secrets.value) {
+      showValues.value[s.id] = false
     }
+
   } catch (err) {
-    errorMessage.value = "Network error";
+    errorMessage.value = err.message || "Network error"
+
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 
 const toggleValue = async (secret) => {
  
@@ -214,8 +184,8 @@ onMounted(async () => {
   }
 
   await Promise.all([
-    fetchSecrets(),
-    fetchOrganizations()
+    loadSecrets(),
+    loadOrganizations()
   ])
 })
 </script>
