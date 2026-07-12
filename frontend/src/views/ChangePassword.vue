@@ -10,7 +10,7 @@ import {
   encryptMasterKey,
   decryptPrivateKey,
   encryptPrivateKey,
-  arrayBufferToBase64, // 💡 Récupère l'utilitaire mis à jour
+  arrayBufferToBase64,
 } from "../function/crypto";
 
 const router = useRouter();
@@ -27,7 +27,6 @@ const loading = ref(false);
 const errorMessage = ref("");
 const successMessage = ref("");
 
-// Password policy
 const passwordRules = computed(() => ({
   minLength: newPassword.value.length >= 12,
   uppercase: /[A-Z]/.test(newPassword.value),
@@ -51,7 +50,6 @@ const onSubmit = async (e) => {
 
   loading.value = true;
 
-  // Variables déclarées en dehors pour le nettoyage RAM global dans le 'finally'
   let oldExtendedKeyRaw, newExtendedKeyRaw, oldKekRaw, newKekRaw, masterKey, privateKeyPkcs8;
 
   try {
@@ -62,7 +60,7 @@ const onSubmit = async (e) => {
     const kdfSalt = Uint8Array.from(atob(data.kdf_salt), (c) => c.charCodeAt(0));
 
     // ===================================
-    // 1️⃣ OLD KEY DERIVATION & AUTH HASH
+    // OLD KEY DERIVATION & AUTH HASH
     // ===================================
     oldExtendedKeyRaw = await deriveExtendedKey(currentPassword.value, kdfSalt);
     const { kekRaw: extractedOldKek, authMasterHash: oldAuthMasterHash } = await splitExtendedKey(oldExtendedKeyRaw);
@@ -71,7 +69,7 @@ const onSubmit = async (e) => {
     const oldKek = await importKEK(oldKekRaw, "decrypt");
 
     // =========================
-    // 2️⃣ DECRYPT SECRETS
+    // DECRYPT SECRETS
     // =========================
     const iv = encryptedMKFull.slice(0, 12);
     const encryptedData = encryptedMKFull.slice(12);
@@ -88,7 +86,7 @@ const onSubmit = async (e) => {
     privateKeyPkcs8 = await decryptPrivateKey(privateKeyIv, oldKek, encryptedPrivateKey);
 
     // ===================================
-    // 3️⃣ NEW KEY DERIVATION & AUTH HASH
+    // NEW KEY DERIVATION & AUTH HASH
     // ===================================
     const newKdfSalt = crypto.getRandomValues(new Uint8Array(16));
     newExtendedKeyRaw = await deriveExtendedKey(newPassword.value, newKdfSalt);
@@ -98,7 +96,7 @@ const onSubmit = async (e) => {
     const newKek = await importKEK(newKekRaw, "encrypt");
 
     // =========================
-    // 4️⃣ RE-ENCRYPT SECRETS
+    // RE-ENCRYPT SECRETS
     // =========================
     const newIv = crypto.getRandomValues(new Uint8Array(12));
     const newEncryptedMK = await encryptMasterKey(newIv, newKek, masterKey);
@@ -113,11 +111,11 @@ const onSubmit = async (e) => {
     finalEncryptedPrivateKey.set(new Uint8Array(newEncryptedPrivateKey), newPrivateKeyIv.length);
 
     // =========================
-    // 5️⃣ NETWORK TRANSMISSION
+    // NETWORK TRANSMISSION
     // =========================
     await rotatePassword({
-      oldPassword: oldAuthMasterHash, // 💡 Renvoie le hash de l'ancien mot de passe
-      newPassword: newAuthMasterHash, // 💡 Renvoie le hash du nouveau mot de passe
+      oldPassword: oldAuthMasterHash,
+      newPassword: newAuthMasterHash,
       encMK: arrayBufferToBase64(finalEncryptedMK),
       encPrivateKey: arrayBufferToBase64(finalEncryptedPrivateKey),
       kdfSalt: arrayBufferToBase64(newKdfSalt),
@@ -125,7 +123,6 @@ const onSubmit = async (e) => {
 
     successMessage.value = "Password successfully updated.\nYou will be redirected to the login page.";
 
-    // 🔒 N'efface les champs du formulaire que si la transaction réseau a réussi à 100%
     currentPassword.value = "";
     newPassword.value = "";
     confirmPassword.value = "";
@@ -138,7 +135,6 @@ const onSubmit = async (e) => {
     console.error("ROTATION ERROR:", err);
     errorMessage.value = err.message || "Unexpected error during rotation";
   } finally {
-    // 🧼 Nettoyage immédiat des secrets binaires en RAM
     if (oldExtendedKeyRaw) oldExtendedKeyRaw.fill(0);
     if (newExtendedKeyRaw) newExtendedKeyRaw.fill(0);
     if (oldKekRaw) oldKekRaw.fill(0);

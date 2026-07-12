@@ -2,7 +2,7 @@
 import { ref } from "vue"
 import { useRouter } from "vue-router"
 import { useCryptoStore } from "../stores/crypto.store"
-import { loginUser, fetchUserSalt } from "../function/function" // 💡 Ajoute fetchUserSalt dans tes requêtes API
+import { loginUser, fetchUserSalt } from "../function/function"
 import { 
   importKEK, 
   deriveExtendedKey, 
@@ -31,24 +31,31 @@ const onSubmit = async (e) => {
   let extendedKeyRaw, kekRaw, decryptedMKBuffer, decryptedPrivateKeyBuffer;
 
   try {
-    // 1️⃣ ÉTAPE 1 : Récupérer le sel de l'utilisateur (Pre-login)
-    // fetchUserSalt(email) doit faire un GET ou POST rapide vers /auth/salt?email=...
+    
+    // ==============================
+    // Récupéreration sel (Pre-login)
+    // ==============================
+
     const saltRes = await fetchUserSalt(email.value);
     if (!saltRes.kdf_salt) {
       throw new Error("Invalid credentials");
     }
 
     const kdfSalt = Uint8Array.from(atob(saltRes.kdf_salt), (c) => c.charCodeAt(0));
-
-    // 2️⃣ ÉTAPE 2 : Dérivation locale 64 octets
+    
+    // ===========================
+    // Dérivation locale 64 octets
+    // ===========================
     extendedKeyRaw = await deriveExtendedKey(password.value, kdfSalt)
     const { kekRaw: extractedKek, authMasterHash } = await splitExtendedKey(extendedKeyRaw)
     kekRaw = extractedKek
 
-    // 3️⃣ ÉTAPE 3 : Envoi du hash réseau au serveur à la place du password brut
+    // ==============
+    // Envoi du hash 
+    // ==============
     const data = await loginUser(
       email.value,
-      authMasterHash // 💡 Envoyé dans le paramètre password attendu par ton API
+      authMasterHash
     )
 
     successMessage.value = data.message || "Login successful";
@@ -67,7 +74,9 @@ const onSubmit = async (e) => {
 
     const kek = await importKEK(kekRaw, "decrypt")
 
-    // 4️⃣ ÉTAPE 4 : Déchiffrement local du coffre
+    // =============================
+    // Déchiffrement local du coffre
+    // =============================
     const mkIv = encryptedMKFull.slice(0, 12)
     const encryptedMK = encryptedMKFull.slice(12)
     decryptedMKBuffer = await decryptMasterKey(mkIv, kek, encryptedMK)
@@ -78,7 +87,9 @@ const onSubmit = async (e) => {
 
     const rsaKeyPair = await importRsaKeyPair(rsaPublicKeyRaw, decryptedPrivateKeyBuffer)
 
-    // Stockage en mémoire vive (Pinia Store)
+    // ===========================
+    // Stockage dans Pinia Store
+    // ===========================
     await cryptoStore.setMasterKey(decryptedMKBuffer)
     await cryptoStore.setRSAKeys(rsaKeyPair.publicKeySpki, rsaKeyPair.privateKeyPkcs8)
 
@@ -88,7 +99,6 @@ const onSubmit = async (e) => {
     console.error("LOGIN CRYPTO ERROR:", err)
     errorMessage.value = "Authentication or crypto error"
   } finally {
-    // 🧹 RAM Clean up
     if (extendedKeyRaw) extendedKeyRaw.fill(0)
     if (kekRaw) kekRaw.fill(0)
     if (decryptedMKBuffer) decryptedMKBuffer.fill(0)
