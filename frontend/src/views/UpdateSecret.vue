@@ -39,8 +39,6 @@ async function submitSecret() {
       cryptoStore.masterKey
     )
 
-    console.log(ciphertext)
-
     await updateSecret(secretId, {
       name: form.value.name,
       type: form.value.type,

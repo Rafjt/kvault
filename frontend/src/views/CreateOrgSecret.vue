@@ -28,19 +28,12 @@ onMounted(async () => {
   try {
     loading.value = true
     const data = await fetchOrg(props.orgId)
-    
-    console.log(data)
 
     const decryptedOsk = await decryptOsk(
         data.organization.protected_osk,
         cryptoStore.rsaPrivateKey
     )
-
-    console.log("decrypted", decryptedOsk)
-
     const oskKey = await importOSK(decryptedOsk)
-
-    console.log(oskKey)
 
     cryptoStore.setOrganizationKey(props.orgId, oskKey)
 

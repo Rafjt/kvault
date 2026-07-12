@@ -55,7 +55,6 @@ const onSubmit = async (e) => {
   let oldExtendedKeyRaw, newExtendedKeyRaw, oldKekRaw, newKekRaw, masterKey, privateKeyPkcs8;
 
   try {
-    console.log("Fetching crypto material...");
     const data = await fetchCryptoMaterial();
 
     const encryptedMKFull = Uint8Array.from(atob(data.encrypted_master_key), (c) => c.charCodeAt(0));

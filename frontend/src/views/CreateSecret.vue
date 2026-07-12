@@ -40,8 +40,6 @@ async function submitSecret() {
       cryptoStore.masterKey
     )
 
-    console.log(ciphertext)
-
     await createSecret(
       form.value.name,
       form.value.type,
