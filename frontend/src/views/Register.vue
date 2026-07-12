@@ -49,7 +49,6 @@ const onSubmit = async (e) => {
 
   loading.value = true
 
-  // Déclaration des structures hors du try pour pouvoir les écraser en RAM dans le finally
   let masterKey, extendedKeyRaw, kekRaw;
 
   try {
@@ -92,12 +91,12 @@ const onSubmit = async (e) => {
     encryptedPrivateKeyBlob.set(privateKeyIv, 0)
     encryptedPrivateKeyBlob.set(new Uint8Array(encryptedPrivateKey), privateKeyIv.length)
 
-    // ======================================
-    // Envoi des données (Sans password brut !)
-    // ======================================
+    // =================
+    // Envoi des données
+    // =================
     const data = await registerUser({
       email: email.value,
-      password: authMasterHash, // 💡 Le serveur reçoit ça à la place du mot de passe
+      password: authMasterHash,
       encMK: arrayBufferToBase64(encryptedMasterKey),
       kdfSalt: arrayBufferToBase64(kdfSalt),
       rsaPublicKey: arrayBufferToBase64(publicKeySpki),
@@ -114,7 +113,6 @@ const onSubmit = async (e) => {
     errorMessage.value = 'An error occurred during registration'
     console.error(err)
   } finally {
-    // 🔥 Zéro-Knowledge RAM Cleanup (Hygiène mémoire stricte)
     if (masterKey) masterKey.fill(0)
     if (extendedKeyRaw) extendedKeyRaw.fill(0)
     if (kekRaw) kekRaw.fill(0)
