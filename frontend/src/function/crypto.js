@@ -338,8 +338,6 @@ export async function encryptOrganizationSecret(plaintext,osk) {
         cipherKey
     )
 
-    console.log(ciphertext)
-
     const encryptedCipherKey = await encryptAESKey(
         rawCipherKey,
         osk

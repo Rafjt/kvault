@@ -33,8 +33,6 @@ async function submitOrganization() {
 
   try {
 
-    console.log(cryptoStore.rsaPublicKey)
-
     const osk = crypto.getRandomValues(new Uint8Array(32))
 
     const encryptedOskBlob = await encryptOsk(osk, cryptoStore.rsaPublicKey)
