@@ -16,13 +16,10 @@ const showValues = ref({})
 const searchQuery = ref('')
 const selectedType = ref('all')
 const organizations = ref([])
-const showOrgValues = ref({})
 const invitations = ref([])
 
-// AJOUT : Stocke le nombre de validations d'accès en attente par organisation { [orgId]: count }
 const pendingConfirmationsCount = ref({})
 
-// Stockage de l'input d'invitation par organisation { [orgId]: 'email/user' }
 const inviteForms = ref({})
 
 async function createOrg() {
@@ -37,7 +34,6 @@ async function redirectToChangePassword() {
   router.push("/change-password");
 }
 
-// Fonction pour gérer l'invitation d'un membre
 async function handleInviteMember(orgId) {
   const form = inviteForms.value[orgId]
 
@@ -113,7 +109,6 @@ async function handleUpdateSecret(secretId) {
   router.push(`/update/${secretId}`);
 }
 
-// AJOUT : Vérifie s'il y a des clés à transmettre pour les admins
 const fetchPendingConfirmations = async (orgId) => {
   try {
     const res = await fetch(`${API_BASE_URL}/org/${orgId}/invitations/pending-confirm`, {
@@ -140,14 +135,12 @@ const fetchOrganizations = async () => {
       organizations.value = data.organizations || []
       invitations.value = data.invitations || [] 
 
-      // Initialisation des formulaires d'invitation et check des confirmations requises
       organizations.value.forEach(org => {
         inviteForms.value[org.id] = {
           email: "",
           role: "member"
         }
 
-        // Si l'utilisateur est admin/owner, on regarde s'il doit valider des arrivants
         if (org.role === 'owner' || org.role === 'admin') {
           fetchPendingConfirmations(org.id)
         }
@@ -230,9 +223,6 @@ onMounted(async () => {
 <template>
   <div class="secrets-page">
 
-    <!-- ===================== -->
-    <!-- ORGANIZATIONS         -->
-    <!-- ===================== -->
     <section class="page-section">
       <div class="section-header-row">
         <h2>Your Organizations</h2>
@@ -326,9 +316,6 @@ onMounted(async () => {
       </div>
     </section>
 
-    <!-- ===================== -->
-    <!-- SECRETS               -->
-    <!-- ===================== -->
     <section class="page-section">
       <h2>Your Secrets</h2>
 
@@ -390,9 +377,6 @@ onMounted(async () => {
       </ul>
     </section>
 
-    <!-- ===================== -->
-    <!-- ACCOUNT               -->
-    <!-- ===================== -->
     <section class="page-section">
       <h2>Your account</h2>
       <div class="secrets-controls">

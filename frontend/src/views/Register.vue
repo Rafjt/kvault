@@ -51,36 +51,57 @@ const onSubmit = async (e) => {
   loading.value = true
 
   try {
-    // 1. Génération du matos crypto
+    // ==========================
+    // Génération du matos crypto
+    // ==========================
+
     const masterKey = crypto.getRandomValues(new Uint8Array(32))
     const kdfSalt = crypto.getRandomValues(new Uint8Array(16))
     const iv = crypto.getRandomValues(new Uint8Array(12))
     const privateKeyIv = crypto.getRandomValues(new Uint8Array(12))
-
-    // 2. Dérivation de la KEK
+    
+    // =======================
+    // Dérivation KEK
+    // =======================
 
     const kekRaw = await deriveKEK(password.value,kdfSalt)
 
     const kek = await importKEK(kekRaw,"encrypt")
 
-    // 3. Chiffrement de la Master Key
+    // ============================
+    // Chiffrement de la Master Key
+    // ============================
+
     const encryptedMK = await encryptMasterKey( iv, kek, masterKey)
 
-    // 4. Assemblage : IV + CIPHERTEXT
+    // ===============
+    // IV + CIPHERTEXT
+    // ===============
+
     const encryptedMasterKey = new Uint8Array(iv.length + encryptedMK.byteLength)
     encryptedMasterKey.set(iv, 0)
     encryptedMasterKey.set(new Uint8Array(encryptedMK), iv.length)
 
-    // 5. Génération de la bi-clé RSA
+    // =====================
+    // Génération bi-clé RSA
+    // =====================
+
     const rsaKeyPair = await generateRSAKeyPair()
 
-    // 6. Exports des clées
+    // =====================
+    // Exports des clées
+    // =====================
+
     const { publicKeySpki, privateKeyPkcs8 } = await exportRsaKeyPair(rsaKeyPair)
 
-    // 7. Chiffrement de la clé privée 
+    // ============================    
+    // Chiffrement de la clé privée 
+    // ============================
     const encryptedPrivateKey = await encryptPrivateKey(privateKeyIv, kek, privateKeyPkcs8)
 
-    // 8. Concaténation IV + Ciphertext (partie privé)
+    // ====================================
+    // Concaténation IV + Ciphertext (priv)
+    // ====================================
     const encryptedPrivateKeyBlob = new Uint8Array(
       privateKeyIv.length + encryptedPrivateKey.byteLength
     )
@@ -92,7 +113,6 @@ const onSubmit = async (e) => {
       privateKeyIv.length
     )
 
-    // Envoi au serveur (L'encodage est délégué proprement ici sans polluer les variables)
     const data = await registerUser({
       email: email.value,
       password: password.value,
@@ -130,13 +150,11 @@ const onSubmit = async (e) => {
 
     <form class="register-form" @submit="onSubmit">
 
-      <!-- EMAIL -->
       <div class="field">
         <label>Email</label>
         <input v-model="email" type="email" required />
       </div>
 
-      <!-- PASSWORD -->
       <div class="field">
         <label>Password</label>
 
@@ -168,7 +186,6 @@ const onSubmit = async (e) => {
         </div>
       </div>
 
-      <!-- CONFIRM PASSWORD -->
       <div class="field">
         <label>Confirm password</label>
 

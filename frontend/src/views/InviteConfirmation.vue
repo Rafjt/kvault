@@ -27,7 +27,6 @@ const loading = ref(false)
 const errorMessage = ref('')
 const processingId = ref(null)
 
-// Version ultra simple (l'exact inverse de ton register)
 function base64ToArrayBuffer(base64) {
   const binaryString = atob(base64)
   const bytes = new Uint8Array(binaryString.length)
@@ -85,15 +84,8 @@ const handleConfirmUser = async (user) => {
       throw new Error("Cannot find users public key. Please reconnect.")
     }
 
-    // 🔬 DÉBOGAGE : On regarde la structure exacte reçue pour l'OSK avant de l'envoyer à decryptOsk
-    console.log("Structure brute de protected_osk:", organization.value.protected_osk)
-
-    // ÉTAPE A : Déchiffrer l'OSK de l'organisation
     const oskRawBuffer = await decryptOsk(organization.value.protected_osk, cryptoStore.rsaPrivateKey)
 
-    // ÉTAPE B : Importer la clé publique du nouvel utilisateur (reçue en Base64 pur)
-    console.log("Public key :", user.rsa_public_key)
-    console.log("Type :", typeof user.rsa_public_key)
     const userPublicKeyBuffer = base64ToArrayBuffer(user.rsa_public_key)
     const importedUserPublicKey = await crypto.subtle.importKey(
       "spki",
@@ -106,19 +98,16 @@ const handleConfirmUser = async (user) => {
       ["encrypt"]
     )
 
-    // ÉTAPE C : Chiffrer l'OSK pour le nouvel utilisateur avec sa clé RSA publique
     const encryptedOskBuffer = await crypto.subtle.encrypt(
       { name: "RSA-OAEP" },
       importedUserPublicKey,
       oskRawBuffer
     )
 
-    // ÉTAPE D : Convertir en Base64 (exactement comme dans ton register)
     const base64ProtectedOsk = btoa(
       String.fromCharCode(...new Uint8Array(encryptedOskBuffer))
     )
 
-    // ÉTAPE E : Envoi au serveur
     const data = await confirmOrganizationUser(
       orgId.value,
       user.invitation_id,

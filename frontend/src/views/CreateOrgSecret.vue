@@ -2,7 +2,7 @@
 import { ref, onMounted } from "vue"
 import { useCryptoStore } from "../stores/crypto.store"
 import { useRouter } from "vue-router"
-import { encryptOrganizationSecret, decryptOsk, importOSK } from "../function/crypto" // N'oublie pas d'importer decryptOsk
+import { encryptOrganizationSecret, decryptOsk, importOSK } from "../function/crypto"
 import { fetchOrg, createOrganizationSecret } from "../function/function"
 
 const cryptoStore = useCryptoStore()
@@ -24,7 +24,6 @@ const form = ref({
   value: ""
 })
 
-// 1. On charge l'OSK au montage du composant
 onMounted(async () => {
   try {
     loading.value = true
@@ -32,7 +31,6 @@ onMounted(async () => {
     
     console.log(data)
 
-    // On déchiffre l'OSK
     const decryptedOsk = await decryptOsk(
         data.organization.protected_osk,
         cryptoStore.rsaPrivateKey
@@ -44,7 +42,6 @@ onMounted(async () => {
 
     console.log(oskKey)
 
-    // On la sauvegarde dans le store pour qu'elle soit accessible partout
     cryptoStore.setOrganizationKey(props.orgId, oskKey)
 
   } catch (err) {
@@ -58,7 +55,6 @@ onMounted(async () => {
 async function submitSecret() {
   errorMessage.value = ""
 
-  // 2. Maintenant, cette ligne va fonctionner car le store a été mis à jour par onMounted !
   const osk = cryptoStore.getOrganizationKey(props.orgId)
 
   if (!osk) {
@@ -74,7 +70,7 @@ async function submitSecret() {
   loading.value = true
 
   try {
-    // Correction de tes variables (tu avais 'plaintext' au lieu de 'form.value.value')
+
     const [ciphertext, encryptedCipherKey] = await encryptOrganizationSecret(form.value.value, osk)
 
     await createOrganizationSecret(
@@ -113,7 +109,6 @@ async function back_home() {
     </div>
 
     <form @submit.prevent="submitSecret">
-      <!-- NAME -->
       <div>
         <label>Name</label>
         <input
@@ -124,7 +119,6 @@ async function back_home() {
         />
       </div>
 
-      <!-- TYPE -->
       <div>
         <label>Type</label>
         <select v-model="form.type">
@@ -136,7 +130,6 @@ async function back_home() {
         </select>
       </div>
 
-      <!-- VALUE -->
       <div>
         <label>Value</label>
         <textarea

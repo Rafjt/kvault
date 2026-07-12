@@ -34,7 +34,7 @@ const onSubmit = async (e) => {
     successMessage.value = data.message || "Login successful";
 
     // =========================
-    // 🔐 CRYPTO — KEY MANAGEMENT
+    // CRYPTO — KEY MANAGEMENT
     // =========================
 
 
@@ -67,7 +67,7 @@ const onSubmit = async (e) => {
     )
 
     // =========================
-    // ARGON2 → KEK
+    // ARGON2 -> KEK
     // =========================
 
     const kekRaw = await deriveKEK(password.value,kdfSalt)
