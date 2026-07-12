@@ -104,19 +104,19 @@ router.post("/register", Limiter, async (req, res) => {
     if (existing.length > 0) {
       const user = existing[0];
 
-      // Case 2: already verified → hard block
+      // already verified 
       if (Boolean(user.is_verified)) {
         return res.status(409).json({ error: "Email already registered." });
       }
 
-      // Case 4: not verified but token still valid → block
+      // not verified but token still valid
       if (user.token_expiry && user.token_expiry > new Date()) {
         return res.status(409).json({
           error: "Account not verified yet. Please check your email.",
         });
       }
 
-      // NOT verified AND expired → delete
+      // NOT verified AND expired
       if (user.token_expiry && user.token_expiry < new Date()) {
         await sequelize.query("DELETE FROM users WHERE login = :email", {
           replacements: { email },
@@ -176,142 +176,97 @@ router.post("/register", Limiter, async (req, res) => {
 
 /* ========================= LOGIN ========================= */
 
+router.post("/login/pre-login", Limiter, async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: "Email required" });
+
+  try {
+    const users = await sequelize.query(
+      `SELECT kdf_salt FROM users WHERE login = ? LIMIT 1;`,
+      { replacements: [email], type: QueryTypes.SELECT }
+    );
+
+    // Si l'utilisateur n'existe pas faux sel aléatoire 
+    if (users.length === 0) {
+      const fakeSalt = crypto.randomBytes(16).toString("base64");
+      return res.json({ kdf_salt: fakeSalt });
+    }
+
+    return res.json({
+      kdf_salt: Buffer.from(users[0].kdf_salt).toString("base64")
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 router.post("/login", Limiter, async (req, res) => {
   const { email, password } = req.body;
   req.log?.info({ email }, "Login attempt");
 
   if (!email || !password) {
-    return res.status(400).json({
-      message: "Email and password are required",
-    });
+    return res.status(400).json({ message: "Email and password are required" });
   }
 
   try {
-    // 1️⃣ Fetch user
+
     const users = await sequelize.query(
-  `
-      SELECT
-          id,
-          login,
-          hashed_master_password,
-          is_verified,
-          encrypted_master_key,
-          kdf_salt,
-          rsa_public_key,
-          encrypted_rsa_private_key,
-          token_expiry
-      FROM users
-      WHERE login = ?
-      `,
-      {
-        replacements: [email],
-        type: QueryTypes.SELECT,
-      }
+      `SELECT id, login, hashed_master_password, is_verified, encrypted_master_key, rsa_public_key, encrypted_rsa_private_key, token_expiry
+       FROM users WHERE login = ?`,
+      { replacements: [email], type: QueryTypes.SELECT }
     );
 
     if (users.length === 0) {
-      return res.status(401).json({
-        message: "Invalid credentials",
-      });
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
     const user = users[0];
 
-    // 2️⃣ Check password FIRST
     const isMatch = await bcrypt.compare(password, user.hashed_master_password);
 
     if (!isMatch) {
-      return res.status(401).json({
-        message: "Invalid credentials",
-      });
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // 3️⃣ Email not verified
     if (!user.is_verified) {
-      // Token expired → regenerate & resend
       if (user.token_expiry && user.token_expiry < new Date()) {
         const newToken = crypto.randomBytes(32).toString("hex");
-
         await sequelize.query(
-          `
-          UPDATE users
-          SET verification_token = :token,
-              token_expiry = DATE_ADD(NOW(), INTERVAL 30 MINUTE)
-          WHERE id = :id
-          `,
-          {
-            replacements: {
-              token: newToken,
-              id: user.id,
-            },
-            type: QueryTypes.UPDATE,
-          }
+          `UPDATE users SET verification_token = :token, token_expiry = DATE_ADD(NOW(), INTERVAL 30 MINUTE) WHERE id = :id`,
+          { replacements: { token: newToken, id: user.id }, type: QueryTypes.UPDATE }
         );
-
         await sendTokenMail(newToken, email);
-
-        return res.status(403).json({
-          message: "Verification link expired. A new email has been sent.",
-        });
+        return res.status(403).json({ message: "Verification link expired. A new email has been sent." });
       }
-
-      return res.status(403).json({
-        message: "Please verify your email before logging in.",
-      });
+      return res.status(403).json({ message: "Please verify your email before logging in." });
     }
 
-    // =========================
-    // 4️⃣ Generate auth token
-    // =========================
     const token = crypto.randomBytes(32).toString("hex");
     const tokenHash = crypto.createHash("sha256").update(token).digest();
 
     await sequelize.query(
-      `
-      INSERT INTO auth_tokens (user_id, token_hash, expires_at)
-      VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))
-      `,
-      {
-        replacements: [user.id, tokenHash],
-        type: QueryTypes.INSERT,
-      }
+      `INSERT INTO auth_tokens (user_id, token_hash, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))`,
+      { replacements: [user.id, tokenHash], type: QueryTypes.INSERT }
     );
 
-    // =========================
-    // 5️⃣ Secure cookie
-    // =========================
     res.cookie("auth_token", token, {
       httpOnly: true,
       sameSite: "Lax",
-      secure: true, // true in HTTPS
+      secure: true,
       maxAge: 60 * 60 * 1000,
     });
 
-    // =========================
-    // 6️⃣ Return crypto material
-    // =========================
     return res.json({
       message: "Login successful",
       crypto: {
-        
-        encrypted_master_key: Buffer.from(user.encrypted_master_key).toString(
-          "base64"
-        ),
-
-        kdf_salt: Buffer.from(user.kdf_salt).toString("base64"),
-
+        encrypted_master_key: Buffer.from(user.encrypted_master_key).toString("base64"),
         rsa_public_key: Buffer.from(user.rsa_public_key).toString("base64"),
-
         encrypted_rsa_private_key: Buffer.from(user.encrypted_rsa_private_key).toString("base64")
-
-
       },
     });
   } catch (error) {
     req.log?.error({ err: error }, "Login error");
-    return res.status(500).json({
-      message: "Internal server error",
-    });
+    return res.status(500).json({ message: "Internal server error" });
   }
 });
 
@@ -320,7 +275,6 @@ router.post("/logout", async (req, res) => {
     const token = req.cookies?.auth_token;
 
     if (!token) {
-      // Rien à révoquer, logout idempotent
       return res.status(204).send();
     }
 
@@ -337,11 +291,10 @@ router.post("/logout", async (req, res) => {
       }
     );
 
-    // Suppression du cookie côté client
     res.clearCookie("auth_token", {
       httpOnly: true,
       sameSite: "Lax",
-      secure: false, // true en HTTPS
+      secure: true,
     });
 
     return res.status(200).json({ message: "Logged out successfully" });
@@ -350,12 +303,12 @@ router.post("/logout", async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 });
+
 /* ========================= VERIFY EMAIL ========================= */
 
 router.get("/verify-email", async (req, res) => {
   const { token } = req.query;
 
-  // token must be exactly 64 hex chars
   if (typeof token !== "string" || !/^[a-f0-9]{64}$/.test(token)) {
     return res
       .status(400)
@@ -476,6 +429,7 @@ router.get("/crypto", authMiddleware, async (req, res) => {
 /*========================== ROTATE PASSWORD ==================*/
 
 router.post("/crypto/rotate-password", authMiddleware, async (req, res) => {
+
   const { oldPassword, newPassword, encMK, encPrivateKey, kdfSalt } = req.body;
 
   if (!oldPassword || !newPassword || !encMK || !encPrivateKey || !kdfSalt) {
@@ -485,10 +439,9 @@ router.post("/crypto/rotate-password", authMiddleware, async (req, res) => {
   }
 
   try {
-    // =========================
-    // Fetch user
-    // =========================
-
+    // ==================================
+    // Récupération du profil utilisateur
+    // ==================================
     const users = await sequelize.query(
       `
       SELECT id, hashed_master_password
@@ -502,16 +455,14 @@ router.post("/crypto/rotate-password", authMiddleware, async (req, res) => {
     );
 
     if (users.length === 0) {
-      return res.status(404).json({
-        message: "User not found",
-      });
+      return res.status(404).json({ message: "User not found" });
     }
 
     const user = users[0];
 
-    // =========================
-    // Verify current password
-    // =========================
+    // ==================================
+    // Validation de l'identité (Bcrypt)
+    // ==================================
 
     const isMatch = await bcrypt.compare(
       oldPassword,
@@ -524,16 +475,15 @@ router.post("/crypto/rotate-password", authMiddleware, async (req, res) => {
       });
     }
 
-    // =========================
-    // Hash new password
-    // =========================
+    // ==================================
+    // Hachage de la nouvelle empreinte
+    // ==================================
 
     const newHashedPassword = await hashPassword(newPassword);
 
-    // =========================
-    // Update user crypto material
-    // =========================
-
+    // ==================================
+    // Persistance en Base de Données
+    // ==================================
     await sequelize.query(
       `
       UPDATE users
@@ -556,10 +506,9 @@ router.post("/crypto/rotate-password", authMiddleware, async (req, res) => {
       },
     );
 
-    // =========================
-    // Invalidate all sessions
-    // =========================
-
+    // ==================================
+    // 5️⃣ Révocation globale des sessions
+    // ==================================
     await sequelize.query(
       `
       DELETE FROM auth_tokens
@@ -575,8 +524,7 @@ router.post("/crypto/rotate-password", authMiddleware, async (req, res) => {
       message: "Password and encryption material updated successfully",
     });
   } catch (err) {
-    console.error("ROTATE PASSWORD ERROR:", err);
-
+    req.log?.error({ err }, "Rotate password error");
     return res.status(500).json({
       message: "Internal server error",
     });

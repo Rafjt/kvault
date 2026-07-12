@@ -242,6 +242,26 @@ export async function confirmOrganizationUser(orgId, invitationId, protectedOsk)
 
 // ######## Authentication ########
 
+export async function fetchUserSalt(email) {
+  const res = await fetch(`${API_AUTH_URL}/login/pre-login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      email
+    })
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to fetch user salt")
+  }
+
+  return data
+}
+
 export async function loginUser(email, password) {
   const res = await fetch(`${API_AUTH_URL}/login`, {
     method: "POST",

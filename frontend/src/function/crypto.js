@@ -1,5 +1,10 @@
 import { argon2id } from 'hash-wasm'
 
+
+export const arrayBufferToBase64 = (buffer) => {
+  return btoa(new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+}
+
 // ======
 //  AES
 // ======
@@ -77,14 +82,28 @@ export async function decryptAESKey(encryptedKeyB64, wrappingKey) {
 //  KEK
 // ======
 
-export async function deriveKEK(password, salt) {
+export async function splitExtendedKey(extendedKeyRaw) {
+    // 32 premier octets : KEK locale pour chiffrer/déchiffrer le coffre
+    const kekRaw = extendedKeyRaw.slice(0, 32);
+    
+    // 32 dernier octets : pour l'authentification
+    const authRaw = extendedKeyRaw.slice(32, 64);
+    
+    // On passe le bloc auth dans SHA-256 pour découpler mathématiquement le hash du réseau de la KEK
+    const authHashBuffer = await crypto.subtle.digest("SHA-256", authRaw);
+    const authMasterHash = arrayBufferToBase64(authHashBuffer);
+
+    return { kekRaw, authMasterHash };
+}
+
+export async function deriveExtendedKey(password, salt) {
     const kekRaw = await argon2id({
       password: password,
       salt: salt,
       parallelism: 1,
       iterations: 3,
       memorySize: 65536,
-      hashLength: 32,
+      hashLength: 64,
       outputType: 'binary'
     })
     return kekRaw

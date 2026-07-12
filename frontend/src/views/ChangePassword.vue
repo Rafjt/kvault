@@ -3,12 +3,14 @@ import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import { fetchCryptoMaterial, rotatePassword } from "../function/function";
 import {
-  deriveKEK,
+  deriveExtendedKey,
+  splitExtendedKey,
   importKEK,
   decryptMasterKey,
   encryptMasterKey,
   decryptPrivateKey,
   encryptPrivateKey,
+  arrayBufferToBase64, // 💡 Récupère l'utilitaire mis à jour
 } from "../function/crypto";
 
 const router = useRouter();
@@ -34,66 +36,46 @@ const passwordRules = computed(() => ({
   special: /[!@#$%^&*(),.?":{}|<>_\-+=~`[\]\\;/]/.test(newPassword.value),
 }));
 
-const isPasswordValid = computed(() =>
-  Object.values(passwordRules.value).every(Boolean),
-);
-
-const passwordsMatch = computed(
-  () => newPassword.value === confirmPassword.value,
-);
+const isPasswordValid = computed(() => Object.values(passwordRules.value).every(Boolean));
+const passwordsMatch = computed(() => newPassword.value === confirmPassword.value);
 
 const onSubmit = async (e) => {
   e.preventDefault();
-
   errorMessage.value = "";
   successMessage.value = "";
 
-  if (!isPasswordValid.value || !passwordsMatch.value) {
-    errorMessage.value = "Invalid password format or mismatch.";
-    return;
-  }
-
-  if (!currentPassword.value) {
-    errorMessage.value = "Current password required.";
+  if (!isPasswordValid.value || !passwordsMatch.value || !currentPassword.value) {
+    errorMessage.value = "Form validation failed.";
     return;
   }
 
   loading.value = true;
 
+  // Variables déclarées en dehors pour le nettoyage RAM global dans le 'finally'
+  let oldExtendedKeyRaw, newExtendedKeyRaw, oldKekRaw, newKekRaw, masterKey, privateKeyPkcs8;
+
   try {
     console.log("Fetching crypto material...");
-
     const data = await fetchCryptoMaterial();
 
-    const encryptedMKFull = Uint8Array.from(
-      atob(data.encrypted_master_key),
-      (c) => c.charCodeAt(0),
-    );
+    const encryptedMKFull = Uint8Array.from(atob(data.encrypted_master_key), (c) => c.charCodeAt(0));
+    const encryptedPrivateKeyFull = Uint8Array.from(atob(data.encrypted_private_key), (c) => c.charCodeAt(0));
+    const kdfSalt = Uint8Array.from(atob(data.kdf_salt), (c) => c.charCodeAt(0));
 
-    const encryptedPrivateKeyFull = Uint8Array.from(
-      atob(data.encrypted_private_key),
-      (c) => c.charCodeAt(0),
-    );
+    // ===================================
+    // 1️⃣ OLD KEY DERIVATION & AUTH HASH
+    // ===================================
+    oldExtendedKeyRaw = await deriveExtendedKey(currentPassword.value, kdfSalt);
+    const { kekRaw: extractedOldKek, authMasterHash: oldAuthMasterHash } = await splitExtendedKey(oldExtendedKeyRaw);
+    oldKekRaw = extractedOldKek;
 
-    const kdfSalt = Uint8Array.from(atob(data.kdf_salt), (c) =>
-      c.charCodeAt(0),
-    );
-
-    // =========================
-    // OLD KEK
-    // =========================
-
-    const oldKekRaw = await deriveKEK(currentPassword.value, kdfSalt);
     const oldKek = await importKEK(oldKekRaw, "decrypt");
 
     // =========================
-    // DECRYPT MASTER KEY
+    // 2️⃣ DECRYPT SECRETS
     // =========================
-
     const iv = encryptedMKFull.slice(0, 12);
     const encryptedData = encryptedMKFull.slice(12);
-
-    let masterKey;
 
     try {
       masterKey = await decryptMasterKey(iv, oldKek, encryptedData);
@@ -101,80 +83,50 @@ const onSubmit = async (e) => {
       throw new Error("Current password is incorrect");
     }
 
-    console.log("Master key decrypted OK");
-
-    // =========================
-    // DECRYPT PRIVATE KEY
-    // =========================
-
     const privateKeyIv = encryptedPrivateKeyFull.slice(0, 12);
     const encryptedPrivateKey = encryptedPrivateKeyFull.slice(12);
 
-    const privateKeyPkcs8 = await decryptPrivateKey(
-      privateKeyIv,
-      oldKek,
-      encryptedPrivateKey,
-    );
+    privateKeyPkcs8 = await decryptPrivateKey(privateKeyIv, oldKek, encryptedPrivateKey);
 
-    // =========================
-    // NEW KEK
-    // =========================
-
+    // ===================================
+    // 3️⃣ NEW KEY DERIVATION & AUTH HASH
+    // ===================================
     const newKdfSalt = crypto.getRandomValues(new Uint8Array(16));
-
-    const newKekRaw = await deriveKEK(newPassword.value, newKdfSalt);
+    newExtendedKeyRaw = await deriveExtendedKey(newPassword.value, newKdfSalt);
+    const { kekRaw: extractedNewKek, authMasterHash: newAuthMasterHash } = await splitExtendedKey(newExtendedKeyRaw);
+    newKekRaw = extractedNewKek;
 
     const newKek = await importKEK(newKekRaw, "encrypt");
 
     // =========================
-    // RE-ENCRYPT MASTER KEY
+    // 4️⃣ RE-ENCRYPT SECRETS
     // =========================
     const newIv = crypto.getRandomValues(new Uint8Array(12));
-
     const newEncryptedMK = await encryptMasterKey(newIv, newKek, masterKey);
-
-    const finalEncryptedMK = new Uint8Array(
-      newIv.length + newEncryptedMK.byteLength,
-    );
-
-    const newPrivateKeyIv = crypto.getRandomValues(new Uint8Array(12));
-
-    const newEncryptedPrivateKey = await encryptPrivateKey(
-      newPrivateKeyIv,
-      newKek,
-      privateKeyPkcs8,
-    );
-
-    const finalEncryptedPrivateKey = new Uint8Array(
-      newPrivateKeyIv.length + newEncryptedPrivateKey.byteLength,
-    );
-
-    finalEncryptedPrivateKey.set(newPrivateKeyIv, 0);
-
-    finalEncryptedPrivateKey.set(
-      new Uint8Array(newEncryptedPrivateKey),
-      newPrivateKeyIv.length,
-    );
-
+    const finalEncryptedMK = new Uint8Array(newIv.length + newEncryptedMK.byteLength);
     finalEncryptedMK.set(newIv, 0);
     finalEncryptedMK.set(new Uint8Array(newEncryptedMK), newIv.length);
 
+    const newPrivateKeyIv = crypto.getRandomValues(new Uint8Array(12));
+    const newEncryptedPrivateKey = await encryptPrivateKey(newPrivateKeyIv, newKek, privateKeyPkcs8);
+    const finalEncryptedPrivateKey = new Uint8Array(newPrivateKeyIv.length + newEncryptedPrivateKey.byteLength);
+    finalEncryptedPrivateKey.set(newPrivateKeyIv, 0);
+    finalEncryptedPrivateKey.set(new Uint8Array(newEncryptedPrivateKey), newPrivateKeyIv.length);
+
     // =========================
-    // SEND TO BACKEND
+    // 5️⃣ NETWORK TRANSMISSION
     // =========================
     await rotatePassword({
-      oldPassword: currentPassword.value,
-      newPassword: newPassword.value,
-
-      encMK: btoa(String.fromCharCode(...finalEncryptedMK)),
-      encPrivateKey: btoa(String.fromCharCode(...finalEncryptedPrivateKey)),
-
-      kdfSalt: btoa(String.fromCharCode(...newKdfSalt)),
+      oldPassword: oldAuthMasterHash, // 💡 Renvoie le hash de l'ancien mot de passe
+      newPassword: newAuthMasterHash, // 💡 Renvoie le hash du nouveau mot de passe
+      encMK: arrayBufferToBase64(finalEncryptedMK),
+      encPrivateKey: arrayBufferToBase64(finalEncryptedPrivateKey),
+      kdfSalt: arrayBufferToBase64(newKdfSalt),
     });
 
-    successMessage.value =
-      "Password successfully updated.\nYou will be redirected to the login page.";
+    successMessage.value = "Password successfully updated.\nYou will be redirected to the login page.";
 
+    // 🔒 N'efface les champs du formulaire que si la transaction réseau a réussi à 100%
     currentPassword.value = "";
     newPassword.value = "";
     confirmPassword.value = "";
@@ -182,10 +134,19 @@ const onSubmit = async (e) => {
     setTimeout(() => {
       router.push("/login");
     }, 7000);
+
   } catch (err) {
     console.error("ROTATION ERROR:", err);
     errorMessage.value = err.message || "Unexpected error during rotation";
   } finally {
+    // 🧼 Nettoyage immédiat des secrets binaires en RAM
+    if (oldExtendedKeyRaw) oldExtendedKeyRaw.fill(0);
+    if (newExtendedKeyRaw) newExtendedKeyRaw.fill(0);
+    if (oldKekRaw) oldKekRaw.fill(0);
+    if (newKekRaw) newKekRaw.fill(0);
+    if (masterKey) masterKey.fill(0);
+    if (privateKeyPkcs8) privateKeyPkcs8.fill(0);
+
     loading.value = false;
   }
 };
