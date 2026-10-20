@@ -48,8 +48,8 @@ L'objectif est de mettre en pratique des principes essentiels de sécurité appl
 - 🛡️ **Authentification** — contrôler l'accès aux ressources protégées.
 - 🧱 **Isolation** — séparer les composants applicatifs et leur infrastructure.
 - ☸️ **Orchestration** — déployer les services dans un environnement Kubernetes.
-- 🔑 **Secret injection** — permettre à une application de démonstration de recevoir les secrets dont elle a besoin sans les intégrer directement à son code.
-- ⚙️ **Automatisation** — explorer les mécanismes de réplication et de sauvegarde de la base de données.
+- 🔑 **Secret injection** — permettre à une application de démonstration de recevoir les secrets dont elle a besoin sans les intégrer directement à son code. WIP 👷 
+- ⚙️ **Automatisation** — explorer les mécanismes de réplication et de sauvegarde de la base de données. WIP 👷 
 
 ## ✨ Fonctionnalités et périmètre
 
@@ -62,7 +62,7 @@ L'objectif est de mettre en pratique des principes essentiels de sécurité appl
 | 🖥️ Interface web | Interface utilisateur développée avec Vue.js |
 | ☸️ Déploiement Kubernetes | Déploiement des composants applicatifs dans un cluster local `kind` |
 | 🔌 Injection de secrets | Mise à disposition de secrets pour une application de démonstration |
-| 🔄 Réplication de base de données | Exploration d'une réplication automatisée vers un serveur distant |
+| 🔄 Réplication de base de données | Exploration d'une réplication automatisée vers un serveur distant WIP 👷|
 
 *Le périmètre ci-dessus décrit les fonctionnalités visées par le projet. Leur disponibilité effective dépend de l'état d'avancement de l'implémentation.*
 
@@ -114,7 +114,7 @@ flowchart TB
 | Kubernetes | Orchestration des services |
 | kind | Cluster Kubernetes local |
 | NGINX Ingress | Routage HTTP/HTTPS vers les services |
-| Terraform / Ansible | Technologies d'infrastructure étudiées dans le contexte DevSecOps |
+| Terraform / Ansible | Technologies d'infrastructure étudiées dans le contexte DevSecOps **WIP 👷**|
 
 ## 🔐 Approche sécurité
 
